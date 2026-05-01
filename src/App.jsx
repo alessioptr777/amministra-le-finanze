@@ -75,6 +75,28 @@ function SideNav() {
 function AppShell() {
   const { loggedIn } = useAuth()
 
+  // Check for required environment variables
+  const missingEnv = []
+  if (!import.meta.env.VITE_SUPABASE_URL) missingEnv.push('VITE_SUPABASE_URL')
+  if (!import.meta.env.VITE_SUPABASE_ANON_KEY) missingEnv.push('VITE_SUPABASE_ANON_KEY')
+  if (!import.meta.env.VITE_APP_PASSWORD) missingEnv.push('VITE_APP_PASSWORD')
+
+  if (missingEnv.length > 0) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-red-50">
+        <div className="bg-white rounded-lg border-2 border-red-200 p-6 max-w-md">
+          <h1 className="text-2xl font-bold text-red-700 mb-3">⚠️ Configuration Error</h1>
+          <p className="text-red-600 mb-4">Missing environment variables:</p>
+          <ul className="list-disc list-inside text-sm text-red-600 mb-4">
+            {missingEnv.map(v => <li key={v}>{v}</li>)}
+          </ul>
+          <p className="text-sm text-slate-600">
+            For Vercel deployment, add these variables in Project Settings → Environment Variables
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   if (!loggedIn) return <Login />
 
