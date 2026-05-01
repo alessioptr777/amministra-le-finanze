@@ -40,6 +40,9 @@ export default function Entrate() {
   const [showNuova, setShowNuova] = useState(false)
   const [savingNuova, setSavingNuova] = useState(false)
   const [filtroAttivita, setFiltroAttivita] = useState('tutte')
+  const [editandoId, setEditandoId] = useState(null)
+  const [editForm, setEditForm] = useState(EMPTY_FORM)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const lordo = (parseFloat(form.importo_cash) || 0) + (parseFloat(form.importo_card) || 0)
 
@@ -93,6 +96,46 @@ export default function Entrate() {
       alert('Errore: ' + err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  function startEdit(e) {
+    setEditandoId(e.id)
+    setEditForm({
+      data: e.data || new Date().toISOString().slice(0, 10),
+      attivita_id: e.attivita_id || '',
+      importo_cash: String(e.importo_cash || ''),
+      importo_card: String(e.importo_card || ''),
+      note: e.note || '',
+    })
+  }
+
+  async function handleSaveEdit(id) {
+    const cash = parseFloat(editForm.importo_cash) || 0
+    const card = parseFloat(editForm.importo_card) || 0
+    const totale = cash + card
+    if (!editForm.attivita_id || totale === 0) return
+    setSavingEdit(true)
+    try {
+      const att = attivita.find(a => a.id === editForm.attivita_id)
+      const { error } = await supabase.from('entrate').update({
+        data: editForm.data,
+        attivita_id: editForm.attivita_id,
+        attivita_nome: att?.nome || '',
+        attivita_colore: att?.colore || '',
+        importo_cash: cash,
+        importo_card: card,
+        importo_lordo: totale,
+        importo_netto: totale,
+        note: editForm.note,
+      }).eq('id', id)
+      if (error) throw error
+      setEditandoId(null)
+      loadEntrate()
+    } catch (err) {
+      alert('Errore: ' + err.message)
+    } finally {
+      setSavingEdit(false)
     }
   }
 
@@ -290,28 +333,72 @@ export default function Entrate() {
 
       <div className="flex flex-col gap-2">
         {entrateFiltrate.length === 0 && <p className="text-center text-slate-400 py-10">Nessuna entrata ancora</p>}
-        {entrateFiltrate.map(e => (
-          <div key={e.id} className="bg-white rounded-xl border border-slate-200 p-3">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="font-medium text-slate-800 text-sm">{e.attivita_nome}</p>
-                <p className="text-xs text-slate-400">{formatData(e.data)}</p>
-                {e.note && <p className="text-xs text-slate-400 mt-0.5">{e.note}</p>}
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-green-700">{formatEur(e.importo_lordo || e.importo_netto)}</p>
-                {(e.importo_cash > 0 || e.importo_card > 0) && (
-                  <div className="flex gap-2 mt-0.5 text-xs text-slate-500 justify-end">
-                    {e.importo_cash > 0 && <span>Cash {formatEur(e.importo_cash)}</span>}
-                    {e.importo_cash > 0 && e.importo_card > 0 && <span>·</span>}
-                    {e.importo_card > 0 && <span>Card {formatEur(e.importo_card)}</span>}
+        {entrateFiltrate.map(e => {
+          const staModificando = editandoId === e.id
+          return (
+            <div key={e.id} className="bg-white rounded-xl border border-slate-200 p-3">
+              {staModificando ? (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Data</label>
+                    <input type="date" value={editForm.data} onChange={ev => setEditForm(f => ({ ...f, data: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                   </div>
-                )}
-              </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Attività</label>
+                    <select value={editForm.attivita_id} onChange={ev => setEditForm(f => ({ ...f, attivita_id: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                      <option value="">Seleziona...</option>
+                      {attivita.filter(a => a.attiva).map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 mb-1 block">Cash €</label>
+                      <input type="number" min="0" step="0.01" value={editForm.importo_cash} onChange={ev => setEditForm(f => ({ ...f, importo_cash: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 mb-1 block">Card €</label>
+                      <input type="number" min="0" step="0.01" value={editForm.importo_card} onChange={ev => setEditForm(f => ({ ...f, importo_card: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Note</label>
+                    <input type="text" value={editForm.note} onChange={ev => setEditForm(f => ({ ...f, note: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditandoId(null)} className="flex-1 border border-slate-300 text-slate-600 rounded-lg py-2 text-sm">Annulla</button>
+                    <button onClick={() => handleSaveEdit(e.id)} disabled={savingEdit} className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-40">
+                      {savingEdit ? 'Salvo...' : 'Salva'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="font-medium text-slate-800 text-sm">{e.attivita_nome}</p>
+                      <p className="text-xs text-slate-400">{formatData(e.data)}</p>
+                      {e.note && <p className="text-xs text-slate-400 mt-0.5">{e.note}</p>}
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-green-700">{formatEur(e.importo_lordo || e.importo_netto)}</p>
+                      {(e.importo_cash > 0 || e.importo_card > 0) && (
+                        <div className="flex gap-2 mt-0.5 text-xs text-slate-500 justify-end">
+                          {e.importo_cash > 0 && <span>Cash {formatEur(e.importo_cash)}</span>}
+                          {e.importo_cash > 0 && e.importo_card > 0 && <span>·</span>}
+                          {e.importo_card > 0 && <span>Card {formatEur(e.importo_card)}</span>}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex gap-3 mt-1.5">
+                    <button onClick={() => startEdit(e)} className="text-xs text-blue-500 hover:text-blue-700">Modifica</button>
+                    <button onClick={() => handleDelete(e.id)} className="text-xs text-red-400 hover:text-red-600">Elimina</button>
+                  </div>
+                </>
+              )}
             </div>
-            <button onClick={() => handleDelete(e.id)} className="text-xs text-red-400 mt-1.5 hover:text-red-600">Elimina</button>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
