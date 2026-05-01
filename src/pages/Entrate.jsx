@@ -16,6 +16,7 @@ const EMPTY_FORM = {
   attivita_id: '',
   importo_cash: '',
   importo_card: '',
+  igic_percentuale: '7',
   note: '',
   dichiara: true,
 }
@@ -46,6 +47,9 @@ export default function Entrate() {
   const [savingEdit, setSavingEdit] = useState(false)
 
   const lordo = (parseFloat(form.importo_cash) || 0) + (parseFloat(form.importo_card) || 0)
+  const igicPerc = parseFloat(form.igic_percentuale) || 0
+  const imponibile = igicPerc > 0 ? lordo / (1 + igicPerc / 100) : lordo
+  const igicImporto = lordo - imponibile
 
   useEffect(() => { loadAttivita(); loadEntrate() }, [])
 
@@ -86,7 +90,8 @@ export default function Entrate() {
         importo_cash: parseFloat(form.importo_cash) || 0,
         importo_card: parseFloat(form.importo_card) || 0,
         importo_lordo: lordo,
-        importo_netto: lordo,
+        importo_netto: imponibile,
+        igic_percentuale: igicPerc,
         note: form.note,
         dichiara: form.dichiara,
       })
@@ -108,6 +113,7 @@ export default function Entrate() {
       attivita_id: e.attivita_id || '',
       importo_cash: String(e.importo_cash || ''),
       importo_card: String(e.importo_card || ''),
+      igic_percentuale: String(e.igic_percentuale ?? 7),
       note: e.note || '',
       dichiara: e.dichiara !== false,
     })
@@ -117,6 +123,8 @@ export default function Entrate() {
     const cash = parseFloat(editForm.importo_cash) || 0
     const card = parseFloat(editForm.importo_card) || 0
     const totale = cash + card
+    const igicP = parseFloat(editForm.igic_percentuale) || 0
+    const imp = igicP > 0 ? totale / (1 + igicP / 100) : totale
     if (!editForm.attivita_id || totale === 0) return
     setSavingEdit(true)
     try {
@@ -129,7 +137,8 @@ export default function Entrate() {
         importo_cash: cash,
         importo_card: card,
         importo_lordo: totale,
-        importo_netto: totale,
+        importo_netto: imp,
+        igic_percentuale: igicP,
         note: editForm.note,
         dichiara: editForm.dichiara,
       }).eq('id', id)
@@ -317,11 +326,34 @@ export default function Entrate() {
               <input type="number" min="0" step="0.01" placeholder="0,00" value={form.importo_card} onChange={e => setForm(f => ({ ...f, importo_card: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
             </div>
           </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">IGIC inclusa</label>
+            <div className="flex gap-2">
+              {[{ val: '0', label: '0% (esente)' }, { val: '7', label: '7% (standard)' }].map(opt => (
+                <button key={opt.val} type="button"
+                  onClick={() => setForm(f => ({ ...f, igic_percentuale: opt.val }))}
+                  className={`flex-1 py-2 rounded-lg text-sm border font-medium ${form.igic_percentuale === opt.val ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-300 text-slate-600'}`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {lordo > 0 && (
-            <div className="bg-green-50 rounded-xl p-3 text-sm">
-              <div className="flex justify-between font-semibold text-green-700">
-                <span>Totale</span>
+            <div className="bg-green-50 rounded-xl p-3 text-sm flex flex-col gap-1">
+              <div className="flex justify-between text-slate-500">
+                <span>Lordo</span>
                 <span>{formatEur(lordo)}</span>
+              </div>
+              {igicPerc > 0 && (
+                <div className="flex justify-between text-slate-500">
+                  <span>IGIC {igicPerc}%</span>
+                  <span>-{formatEur(igicImporto)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-semibold text-green-700 border-t border-green-200 pt-1">
+                <span>Imponibile (Mod 130)</span>
+                <span>{formatEur(imponibile)}</span>
               </div>
             </div>
           )}
@@ -377,6 +409,18 @@ export default function Entrate() {
                   <div>
                     <label className="text-xs font-medium text-slate-600 mb-1 block">Note</label>
                     <input type="text" value={editForm.note} onChange={ev => setEditForm(f => ({ ...f, note: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">IGIC inclusa</label>
+                    <div className="flex gap-2">
+                      {[{ val: '0', label: '0% (esente)' }, { val: '7', label: '7% (standard)' }].map(opt => (
+                        <button key={opt.val} type="button"
+                          onClick={() => setEditForm(f => ({ ...f, igic_percentuale: opt.val }))}
+                          className={`flex-1 py-2 rounded-lg text-sm border font-medium ${editForm.igic_percentuale === opt.val ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-300 text-slate-600'}`}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                   <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
                     <div>

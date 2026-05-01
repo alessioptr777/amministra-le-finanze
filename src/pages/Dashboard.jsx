@@ -102,7 +102,7 @@ export default function Dashboard() {
       const [feYTD, frYTD, enYTD, feQ, frQ, debRes] = await Promise.all([
         supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', startAnno).lte('data', end),
         supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', startAnno).lte('data', end),
-        supabase.from('entrate').select('importo_netto').gte('data', startAnno).lte('data', end).neq('dichiara', false),
+        supabase.from('entrate').select('importo_netto,importo_lordo,igic_percentuale').gte('data', startAnno).lte('data', end).neq('dichiara', false),
         supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', start).lte('data', end),
         supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', start).lte('data', end),
         supabase.from('debiti').select('rata_mensile,importo_totale,importo_pagato,igic_percentuale,deducibile').eq('deducibile', true),
@@ -206,6 +206,9 @@ export default function Dashboard() {
     ? datiQ.feQ.reduce((s, f) => {
         const perc = f.igic_percentuale ?? 7
         return s + (perc > 0 ? f.totale * perc / (100 + perc) : 0)
+      }, 0)
+      + datiQ.enYTD.reduce((s, e) => {
+        return s + ((e.importo_lordo || 0) - (e.importo_netto || 0))
       }, 0)
     : 0
   const igicSoportado = datiQ
