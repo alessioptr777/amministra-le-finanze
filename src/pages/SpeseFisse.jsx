@@ -21,7 +21,7 @@ export function loadSpeseFisse() {
 }
 
 export default function SpeseFisse() {
-  const [voci, setVoci] = useState(loadSpeseFisse)
+  const [voci, setVoci] = useState(loadSpeseFisse())
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [editId, setEditId] = useState(null)
