@@ -1,6 +1,5 @@
-import { useState } from 'react'
-
-const STORAGE_KEY = 'spese_fisse_v1'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 function formatEur(n) {
   return '€' + Number(n || 0).toFixed(2).replace('.', ',')
@@ -16,38 +15,72 @@ const EMPTY_FORM = {
   note: '',
 }
 
-export function loadSpeseFisse() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]') } catch { return [] }
+export async function loadSpeseFisse() {
+  try {
+    const { data, error } = await supabase.from('spese_fisse').select('*').order('giorno_addebito')
+    if (error) throw error
+    return data || []
+  } catch (err) {
+    console.error('Errore caricamento spese fisse:', err.message)
+    return []
+  }
 }
 
 export default function SpeseFisse() {
-  const [voci, setVoci] = useState(loadSpeseFisse())
+  const [voci, setVoci] = useState([])
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [editId, setEditId] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
 
-  function persist(nuove) {
-    setVoci(nuove)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(nuove))
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase.from('spese_fisse').select('*').order('giorno_addebito')
+      if (error) throw error
+      setVoci(data || [])
+    } catch (err) {
+      console.error('Errore spese fisse:', err.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  function handleSave(e) {
+  async function handleSave(e) {
     e.preventDefault()
     if (!form.nome || !form.importo) return
-    const voce = {
-      id: editId || Date.now().toString(),
-      nome: form.nome.trim(),
-      importo: parseFloat(form.importo),
-      giorno_addebito: form.giorno_addebito ? parseInt(form.giorno_addebito) : null,
-      deducibile: form.deducibile,
-      igic_percentuale: form.deducibile ? (parseFloat(form.igic_percentuale) || 0) : 0,
-      variabile: form.variabile,
-      note: form.note.trim(),
+    setSaving(true)
+    try {
+      const data = {
+        nome: form.nome.trim(),
+        importo: parseFloat(form.importo),
+        giorno_addebito: form.giorno_addebito ? parseInt(form.giorno_addebito) : null,
+        deducibile: form.deducibile,
+        igic_percentuale: form.deducibile ? (parseFloat(form.igic_percentuale) || 0) : 0,
+        variabile: form.variabile,
+        note: form.note.trim(),
+      }
+
+      if (editId) {
+        const { error } = await supabase.from('spese_fisse').update(data).eq('id', editId)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('spese_fisse').insert([data])
+        if (error) throw error
+      }
+
+      setForm(EMPTY_FORM)
+      setShowForm(false)
+      setEditId(null)
+      load()
+    } catch (err) {
+      alert('Errore: ' + err.message)
+    } finally {
+      setSaving(false)
     }
-    persist(editId ? voci.map(v => v.id === editId ? voce : v) : [...voci, voce])
-    setForm(EMPTY_FORM)
-    setShowForm(false)
-    setEditId(null)
   }
 
   function startEdit(v) {
@@ -64,8 +97,14 @@ export default function SpeseFisse() {
     setShowForm(true)
   }
 
-  function handleDelete(id) {
-    persist(voci.filter(v => v.id !== id))
+  async function handleDelete(id) {
+    try {
+      const { error } = await supabase.from('spese_fisse').delete().eq('id', id)
+      if (error) throw error
+      load()
+    } catch (err) {
+      alert('Errore: ' + err.message)
+    }
   }
 
   const totale = voci.reduce((s, v) => s + v.importo, 0)
@@ -91,7 +130,9 @@ export default function SpeseFisse() {
       </div>
       <p className="text-xs text-slate-400 mb-4">Abbonamenti e costi mensili ricorrenti (senza data di fine)</p>
 
-      {voci.length > 0 && (
+      {loading && <p className="text-xs text-slate-400">Caricamento...</p>}
+
+      {!loading && voci.length > 0 && (
         <div className="grid grid-cols-2 gap-2 mb-5">
           <div className="bg-red-50 rounded-xl p-3 border border-red-100">
             <p className="text-xs text-red-700 font-medium mb-1">Totale mensile</p>
@@ -225,15 +266,15 @@ export default function SpeseFisse() {
 
           <button
             type="submit"
-            disabled={!form.nome || !form.importo}
+            disabled={!form.nome || !form.importo || saving}
             className="bg-red-600 text-white rounded-xl py-3 font-semibold disabled:opacity-40"
           >
-            {editId ? 'Salva modifiche' : 'Aggiungi spesa fissa'}
+            {saving ? 'Salvo...' : editId ? 'Salva modifiche' : 'Aggiungi spesa fissa'}
           </button>
         </form>
       )}
 
-      {voci.length === 0 && !showForm && (
+      {!loading && voci.length === 0 && !showForm && (
         <div className="text-center py-10">
           <p className="text-slate-400 text-sm mb-2">Nessuna spesa fissa ancora</p>
           <p className="text-slate-300 text-xs">Aggiungi affitto, abbonamenti, SS...</p>

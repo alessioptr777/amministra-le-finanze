@@ -59,6 +59,7 @@ export default function Dashboard() {
   const [attivita, setAttivita] = useState([])
   const [fattureEmesse, setFattureEmesse] = useState([])
   const [fattureRicevute, setFattureRicevute] = useState([])
+  const [speseFisse, setSpeseFisse] = useState([])
   const [loading, setLoading] = useState(true)
   const [datiQ, setDatiQ] = useState(null)
   const [entrateSettimana, setEntrateSettimana] = useState([])
@@ -76,18 +77,20 @@ export default function Dashboard() {
   async function loadDati() {
     setLoading(true)
     try {
-      const [eRes, sRes, aRes, feRes, frRes] = await Promise.all([
+      const [eRes, sRes, aRes, feRes, frRes, sfRes] = await Promise.all([
         supabase.from('entrate').select('*').gte('data', `${meseStr}-01`).lte('data', dataFine),
         supabase.from('spese').select('*').gte('data', `${meseStr}-01`).lte('data', dataFine),
         supabase.from('attivita').select('*'),
         supabase.from('fatture_emesse').select('*').gte('data', `${meseStr}-01`).lte('data', dataFine),
         supabase.from('fatture_ricevute').select('*').gte('data', `${meseStr}-01`).lte('data', dataFine),
+        supabase.from('spese_fisse').select('*'),
       ])
       setEntrate(eRes.data || [])
       setSpese(sRes.data || [])
       setAttivita(aRes.data || [])
       setFattureEmesse(feRes.data || [])
       setFattureRicevute(frRes.data || [])
+      setSpeseFisse(sfRes.data || [])
     } catch (err) {
       console.error('Errore dashboard:', err.message)
     } finally {
@@ -218,8 +221,8 @@ export default function Dashboard() {
       }, 0)
     : 0
 
-  // Spese fisse mensili da localStorage
-  const speseFisseVoci = loadSpeseFisse()
+  // Spese fisse mensili dal database
+  const speseFisseVoci = speseFisse
   const totaleFisso = speseFisseVoci.reduce((s, v) => s + v.importo, 0)
 
   // Spese fisse deducibili → entrano nei calcoli tasse automaticamente
