@@ -61,7 +61,7 @@ export default function Debiti() {
 
   async function loadDebiti() {
     try {
-      const { data, error } = await supabase.from('debiti').select('*').order('created_at', { ascending: false })
+      const { data, error } = await supabase.from('debiti').select('*').order('posizione', { ascending: true })
       if (error) throw error
       setDebiti(data)
       data.forEach(d => loadRate(d.id))
@@ -186,6 +186,23 @@ export default function Debiti() {
       loadDebiti()
     } catch (err) {
       alert('Errore: ' + err.message)
+    }
+  }
+
+  async function muoviDebito(id, direzione) {
+    try {
+      const idx = debiti.findIndex(d => d.id === id)
+      if (idx === -1) return
+      const targetIdx = direzione === 'su' ? idx - 1 : idx + 1
+      if (targetIdx < 0 || targetIdx >= debiti.length) return
+      const d1 = debiti[idx]
+      const d2 = debiti[targetIdx]
+      const [p1, p2] = [d1.posizione, d2.posizione]
+      await supabase.from('debiti').update({ posizione: p2 }).eq('id', d1.id)
+      await supabase.from('debiti').update({ posizione: p1 }).eq('id', d2.id)
+      loadDebiti()
+    } catch (err) {
+      console.error('Errore movimento:', err.message)
     }
   }
 
@@ -463,10 +480,16 @@ export default function Debiti() {
                     ? <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-1 rounded-full">Estinto</span>
                     : <span className="text-sm font-bold text-red-700">{formatEur(residuo)}</span>
                   }
-                  <button onClick={() => staModificando ? setEditandoId(null) : startEdit(debito)}
-                    className="text-xs text-blue-500 border border-blue-200 rounded-lg px-2 py-1 hover:bg-blue-50">
-                    {staModificando ? 'Annulla' : 'Modifica'}
-                  </button>
+                  <div className="flex gap-1">
+                    <button onClick={() => muoviDebito(debito.id, 'su')} disabled={debiti.findIndex(d => d.id === debito.id) === 0}
+                      className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-30 px-1">↑</button>
+                    <button onClick={() => muoviDebito(debito.id, 'giu')} disabled={debiti.findIndex(d => d.id === debito.id) === debiti.length - 1}
+                      className="text-xs text-slate-400 hover:text-slate-600 disabled:opacity-30 px-1">↓</button>
+                    <button onClick={() => staModificando ? setEditandoId(null) : startEdit(debito)}
+                      className="text-xs text-blue-500 border border-blue-200 rounded-lg px-2 py-1 hover:bg-blue-50">
+                      {staModificando ? 'Annulla' : 'Modifica'}
+                    </button>
+                  </div>
                 </div>
               </div>
 
