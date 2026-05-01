@@ -15,29 +15,37 @@ export default function Test() {
     try {
       addLog('Testing Supabase connection...')
 
+      // Test 0: Check environment
+      addLog('Test 0: Checking environment...')
+      if (import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        addLog(`✓ Supabase URL and key are configured`, 'success')
+      } else {
+        addLog(`✗ Missing Supabase environment variables`, 'error')
+      }
+
       // Test 1: Read from attivita table
       addLog('Test 1: Reading attivita table...')
-      const { data: attivita, error: err1 } = await supabase.from('attivita').select('count', { count: 'exact' })
+      const { data: attivitaData, error: err1, count: count1 } = await supabase.from('attivita').select('*', { count: 'exact' })
       if (err1) {
         addLog(`Error reading attivita: ${err1.message}`, 'error')
       } else {
-        addLog(`✓ attivita table exists`, 'success')
+        addLog(`✓ attivita table readable, ${count1 || attivitaData?.length || 0} rows`, 'success')
       }
 
       // Test 2: Read from entrate table
       addLog('Test 2: Reading entrate table...')
-      const { data: entrate, error: err2 } = await supabase.from('entrate').select('count', { count: 'exact' })
+      const { data: entrateData, error: err2, count: count2 } = await supabase.from('entrate').select('*', { count: 'exact' })
       if (err2) {
         addLog(`Error reading entrate: ${err2.message}`, 'error')
       } else {
-        addLog(`✓ entrate table exists, ${entrate?.length || 0} rows`, 'success')
+        addLog(`✓ entrate table readable, ${count2 || entrateData?.length || 0} rows`, 'success')
       }
 
       // Test 3: Insert test record
       addLog('Test 3: Inserting test entrata...')
       const testData = {
         data: new Date().toISOString().slice(0, 10),
-        attivita_id: 'test-id-12345',
+        attivita_id: 'test-' + Date.now(),
         attivita_nome: 'TEST',
         attivita_colore: '#ff0000',
         importo_cash: 100,
@@ -46,15 +54,18 @@ export default function Test() {
         cash_dichiarato: 100,
         importo_netto: 140,
         igic_percentuale: 7,
-        note: 'Test entry',
+        note: 'Test entry - auto-delete',
         dichiara: true,
       }
 
       const { data: inserted, error: err3 } = await supabase.from('entrate').insert([testData]).select()
       if (err3) {
-        addLog(`Error inserting: ${err3.message}`, 'error')
+        addLog(`✗ Insert failed: ${err3.message}`, 'error')
+        addLog(`Details: ${JSON.stringify(err3)}`, 'error')
+      } else if (!inserted || inserted.length === 0) {
+        addLog(`✗ Insert returned no data`, 'error')
       } else {
-        addLog(`✓ Insert successful, ID: ${inserted?.[0]?.id}`, 'success')
+        addLog(`✓ Insert successful, ID: ${inserted[0]?.id}`, 'success')
 
         // Test 4: Read it back
         if (inserted?.[0]?.id) {
@@ -62,8 +73,11 @@ export default function Test() {
           const { data: readBack, error: err4 } = await supabase.from('entrate').select('*').eq('id', inserted[0].id)
           if (err4) {
             addLog(`Error reading back: ${err4.message}`, 'error')
+          } else if (!readBack || readBack.length === 0) {
+            addLog(`✗ Record not found after insert!`, 'error')
           } else {
-            addLog(`✓ Read back successful: ${JSON.stringify(readBack?.[0])}`, 'success')
+            addLog(`✓ Read back successful`, 'success')
+            addLog(`  Data: ${JSON.stringify(readBack[0]).substring(0, 100)}...`, 'info')
 
             // Test 5: Delete
             addLog('Test 5: Deleting test record...')
@@ -77,7 +91,7 @@ export default function Test() {
         }
       }
 
-      addLog('All tests completed!')
+      addLog('==== Tests completed! ====', 'info')
     } catch (err) {
       addLog(`Unexpected error: ${err.message}`, 'error')
     } finally {

@@ -53,7 +53,25 @@ export default function Entrate() {
   const imponibile = igicPerc > 0 ? lordoDichiarato / (1 + igicPerc / 100) : lordoDichiarato
   const igicImporto = lordoDichiarato - imponibile
 
-  useEffect(() => { loadAttivita(); loadEntrate() }, [])
+  useEffect(() => {
+    loadAttivita().then(att => {
+      if (!att || att.length === 0) {
+        initializeDefaultAttivita()
+      }
+    })
+    loadEntrate()
+  }, [])
+
+  async function initializeDefaultAttivita() {
+    try {
+      const { error } = await supabase.from('attivita').insert(DEFAULT_ATTIVITA)
+      if (!error) {
+        loadAttivita()
+      }
+    } catch (err) {
+      console.error('Errore init attività:', err.message)
+    }
+  }
 
   async function loadAttivita() {
     setLoadingAttivita(true)
@@ -61,8 +79,10 @@ export default function Entrate() {
       const { data, error } = await supabase.from('attivita').select('*').order('created_at')
       if (error) throw error
       setAttivita(data)
+      return data
     } catch (err) {
       console.error('Errore attività:', err.message)
+      return null
     } finally {
       setLoadingAttivita(false)
     }
@@ -80,11 +100,14 @@ export default function Entrate() {
 
   async function handleSave(e) {
     e.preventDefault()
-    if (!form.attivita_id || lordo === 0) return
+    if (!form.attivita_id || lordo === 0) {
+      console.warn('Form validation failed:', { attivita_id: form.attivita_id, lordo })
+      return
+    }
     setSaving(true)
     try {
       const att = attivita.find(a => a.id === form.attivita_id)
-      const { error } = await supabase.from('entrate').insert({
+      const data = {
         data: form.data,
         attivita_id: form.attivita_id,
         attivita_nome: att?.nome || '',
@@ -97,12 +120,19 @@ export default function Entrate() {
         igic_percentuale: igicPerc,
         note: form.note,
         dichiara: form.dichiara,
-      })
-      if (error) throw error
+      }
+      console.log('Saving entrata:', data)
+      const { error, data: inserted } = await supabase.from('entrate').insert([data]).select()
+      if (error) {
+        console.error('Supabase error:', error)
+        throw error
+      }
+      console.log('Insert successful:', inserted)
       setForm(EMPTY_FORM)
       setShowForm(false)
       loadEntrate()
     } catch (err) {
+      console.error('Save error:', err)
       alert('Errore: ' + err.message)
     } finally {
       setSaving(false)
