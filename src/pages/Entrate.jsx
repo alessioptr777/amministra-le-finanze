@@ -15,6 +15,7 @@ const EMPTY_FORM = {
   data: new Date().toISOString().slice(0, 10),
   attivita_id: '',
   importo_cash: '',
+  cash_dichiarato: '',
   importo_card: '',
   igic_percentuale: '7',
   note: '',
@@ -47,9 +48,10 @@ export default function Entrate() {
   const [savingEdit, setSavingEdit] = useState(false)
 
   const lordo = (parseFloat(form.importo_cash) || 0) + (parseFloat(form.importo_card) || 0)
+  const lordoDichiarato = (parseFloat(form.cash_dichiarato) || 0) + (parseFloat(form.importo_card) || 0)
   const igicPerc = parseFloat(form.igic_percentuale) || 0
-  const imponibile = igicPerc > 0 ? lordo / (1 + igicPerc / 100) : lordo
-  const igicImporto = lordo - imponibile
+  const imponibile = igicPerc > 0 ? lordoDichiarato / (1 + igicPerc / 100) : lordoDichiarato
+  const igicImporto = lordoDichiarato - imponibile
 
   useEffect(() => { loadAttivita(); loadEntrate() }, [])
 
@@ -90,6 +92,7 @@ export default function Entrate() {
         importo_cash: parseFloat(form.importo_cash) || 0,
         importo_card: parseFloat(form.importo_card) || 0,
         importo_lordo: lordo,
+        cash_dichiarato: parseFloat(form.cash_dichiarato) || 0,
         importo_netto: imponibile,
         igic_percentuale: igicPerc,
         note: form.note,
@@ -112,6 +115,7 @@ export default function Entrate() {
       data: e.data || new Date().toISOString().slice(0, 10),
       attivita_id: e.attivita_id || '',
       importo_cash: String(e.importo_cash || ''),
+      cash_dichiarato: String(e.cash_dichiarato || ''),
       importo_card: String(e.importo_card || ''),
       igic_percentuale: String(e.igic_percentuale ?? 7),
       note: e.note || '',
@@ -121,10 +125,12 @@ export default function Entrate() {
 
   async function handleSaveEdit(id) {
     const cash = parseFloat(editForm.importo_cash) || 0
+    const cashDich = parseFloat(editForm.cash_dichiarato) || 0
     const card = parseFloat(editForm.importo_card) || 0
     const totale = cash + card
     const igicP = parseFloat(editForm.igic_percentuale) || 0
-    const imp = igicP > 0 ? totale / (1 + igicP / 100) : totale
+    const lordoDich = cashDich + card
+    const imp = igicP > 0 ? lordoDich / (1 + igicP / 100) : lordoDich
     if (!editForm.attivita_id || totale === 0) return
     setSavingEdit(true)
     try {
@@ -137,6 +143,7 @@ export default function Entrate() {
         importo_cash: cash,
         importo_card: card,
         importo_lordo: totale,
+        cash_dichiarato: cashDich,
         importo_netto: imp,
         igic_percentuale: igicP,
         note: editForm.note,
@@ -318,13 +325,17 @@ export default function Entrate() {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-slate-600 mb-1 block">Cash €</label>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">Cash totale €</label>
               <input type="number" min="0" step="0.01" placeholder="0,00" value={form.importo_cash} onChange={e => setForm(f => ({ ...f, importo_cash: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">Card €</label>
               <input type="number" min="0" step="0.01" placeholder="0,00" value={form.importo_card} onChange={e => setForm(f => ({ ...f, importo_card: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
             </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Cash dichiarato € <span className="text-slate-400 font-normal">(quello che versi in banca)</span></label>
+            <input type="number" min="0" step="0.01" placeholder="0,00" value={form.cash_dichiarato} onChange={e => setForm(f => ({ ...f, cash_dichiarato: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="text-xs font-medium text-slate-600 mb-1 block">IGIC inclusa</label>
@@ -398,13 +409,17 @@ export default function Entrate() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-medium text-slate-600 mb-1 block">Cash €</label>
+                      <label className="text-xs font-medium text-slate-600 mb-1 block">Cash totale €</label>
                       <input type="number" min="0" step="0.01" value={editForm.importo_cash} onChange={ev => setEditForm(f => ({ ...f, importo_cash: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-slate-600 mb-1 block">Card €</label>
                       <input type="number" min="0" step="0.01" value={editForm.importo_card} onChange={ev => setEditForm(f => ({ ...f, importo_card: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Cash dichiarato € <span className="text-slate-400 font-normal">(quello che versi in banca)</span></label>
+                    <input type="number" min="0" step="0.01" value={editForm.cash_dichiarato} onChange={ev => setEditForm(f => ({ ...f, cash_dichiarato: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-slate-600 mb-1 block">Note</label>
