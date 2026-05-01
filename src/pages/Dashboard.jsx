@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { loadSpeseFisse } from './SpeseFisse'
 
 function formatEur(n) {
   return '€' + Number(n || 0).toFixed(2).replace('.', ',')
@@ -27,7 +26,7 @@ function getInfoTrimestre() {
     deadline: `${deadlines[q - 1]} ${deadlineAnno}`,
     startAnno: `${anno}-01-01`,
     start: `${anno}-${String(startMese).padStart(2, '0')}-01`,
-    end: `${anno}-${String(endMese).padStart(2, '0')}-30`,
+    end: new Date(anno, endMese, 0).toISOString().slice(0, 10),
   }
 }
 
@@ -102,12 +101,13 @@ export default function Dashboard() {
     try {
       const { startAnno, start, end } = infoQ
       // Mod 130 cumulative (Jan 1 → fine trimestre), Mod 420 solo trimestre corrente
-      const [feYTD, frYTD, enYTD, feQ, frQ, debRes] = await Promise.all([
+      const [feYTD, frYTD, enYTD, feQ, frQ, enQ, debRes] = await Promise.all([
         supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', startAnno).lte('data', end),
         supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', startAnno).lte('data', end),
-        supabase.from('entrate').select('importo_netto,importo_lordo,igic_percentuale,cash_dichiarato,importo_card').gte('data', startAnno).lte('data', end).neq('dichiara', false),
+        supabase.from('entrate').select('importo_netto').gte('data', startAnno).lte('data', end).neq('dichiara', false),
         supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', start).lte('data', end),
         supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', start).lte('data', end),
+        supabase.from('entrate').select('importo_netto,igic_percentuale,cash_dichiarato,importo_card').gte('data', start).lte('data', end).neq('dichiara', false),
         supabase.from('debiti').select('rata_mensile,importo_totale,importo_pagato,igic_percentuale,deducibile').eq('deducibile', true),
       ])
       setDatiQ({
@@ -116,6 +116,7 @@ export default function Dashboard() {
         enYTD: enYTD.data || [],
         feQ: feQ.data || [],
         frQ: frQ.data || [],
+        enQ: enQ.data || [],
         debitiDeducibili: (debRes.data || []).filter(d => (d.importo_totale - (d.importo_pagato || 0)) > 0),
       })
     } catch (err) {
@@ -210,7 +211,7 @@ export default function Dashboard() {
         const perc = f.igic_percentuale ?? 7
         return s + (perc > 0 ? f.totale * perc / (100 + perc) : 0)
       }, 0)
-      + datiQ.enYTD.reduce((s, e) => {
+      + datiQ.enQ.reduce((s, e) => {
         const lordoDich = (e.cash_dichiarato || 0) + (e.importo_card || 0)
         return s + (lordoDich - (e.importo_netto || 0))
       }, 0)
