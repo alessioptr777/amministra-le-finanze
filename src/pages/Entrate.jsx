@@ -16,15 +16,13 @@ const EMPTY_FORM = {
   attivita_id: '',
   importo_cash: '',
   importo_card: '',
-  commissione_percentuale: '',
-  metodo_pagamento_commissione: 'cash',
   note: '',
 }
 
-const EMPTY_NUOVA = { nome: '', commissione_percentuale_default: '0', epigrafe: 'actividades' }
+const EMPTY_NUOVA = { nome: '', epigrafe: 'actividades' }
 
 const DEFAULT_ATTIVITA = [
-  { nome: 'Tenerife Stars', tipo: 'collaborazione', epigrafe: 'fotografo', commissione_percentuale_default: 33, colore: '#f59e0b', attiva: true },
+  { nome: 'Tenerife Stars', tipo: 'collaborazione', epigrafe: 'fotografo', commissione_percentuale_default: 0, colore: '#f59e0b', attiva: true },
   { nome: 'Interstellar', tipo: 'propria', epigrafe: 'actividades', commissione_percentuale_default: 0, colore: '#3b82f6', attiva: true },
   { nome: 'Foodfather', tipo: 'propria', epigrafe: 'actividades', commissione_percentuale_default: 0, colore: '#10b981', attiva: true },
   { nome: 'Fotografia privata', tipo: 'privata', epigrafe: 'fotografo', commissione_percentuale_default: 0, colore: '#8b5cf6', attiva: true },
@@ -42,15 +40,8 @@ export default function Entrate() {
   const [showNuova, setShowNuova] = useState(false)
   const [savingNuova, setSavingNuova] = useState(false)
   const [filtroAttivita, setFiltroAttivita] = useState('tutte')
-  const [settimanaSelezionata, setSettimanaSelezionata] = useState('')
-  const [commissioniPagate, setCommissioniPagate] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('commissioni_pagate') || '{}') } catch { return {} }
-  })
 
   const lordo = (parseFloat(form.importo_cash) || 0) + (parseFloat(form.importo_card) || 0)
-  const commPerc = parseFloat(form.commissione_percentuale) || 0
-  const commissione = (lordo * commPerc) / 100
-  const netto = lordo - commissione
 
   useEffect(() => { loadAttivita(); loadEntrate() }, [])
 
@@ -77,11 +68,6 @@ export default function Entrate() {
     }
   }
 
-  function handleAttivitaChange(id) {
-    const a = attivita.find(a => a.id === id)
-    setForm(f => ({ ...f, attivita_id: id, commissione_percentuale: a ? String(a.commissione_percentuale_default) : '' }))
-  }
-
   async function handleSave(e) {
     e.preventDefault()
     if (!form.attivita_id || lordo === 0) return
@@ -96,10 +82,7 @@ export default function Entrate() {
         importo_cash: parseFloat(form.importo_cash) || 0,
         importo_card: parseFloat(form.importo_card) || 0,
         importo_lordo: lordo,
-        commissione_percentuale: commPerc,
-        importo_commissione: commissione,
-        metodo_pagamento_commissione: form.metodo_pagamento_commissione,
-        importo_netto: netto,
+        importo_netto: lordo,
         note: form.note,
       })
       if (error) throw error
@@ -152,7 +135,7 @@ export default function Entrate() {
         nome: nuova.nome.trim(),
         tipo: 'propria',
         epigrafe: nuova.epigrafe,
-        commissione_percentuale_default: parseFloat(nuova.commissione_percentuale_default) || 0,
+        commissione_percentuale_default: 0,
         colore: '#6366f1',
         attiva: true,
       })
@@ -171,47 +154,9 @@ export default function Entrate() {
     ? entrate
     : entrate.filter(e => e.attivita_id === filtroAttivita)
 
-  const totaleNetto = entrateFiltrate.reduce((s, e) => s + (e.importo_netto || 0), 0)
-  const totaleCommissioni = entrateFiltrate.reduce((s, e) => s + (e.importo_commissione || 0), 0)
   const totaleCash = entrateFiltrate.reduce((s, e) => s + (e.importo_cash || 0), 0)
   const totaleCard = entrateFiltrate.reduce((s, e) => s + (e.importo_card || 0), 0)
-
-  const attivitaFiltrata = attivita.find(a => a.id === filtroAttivita)
-  const mostraSettimane = attivitaFiltrata && attivitaFiltrata.commissione_percentuale_default > 0
-
-  function getWeekKey(dateStr) {
-    const date = new Date(dateStr)
-    const day = date.getDay()
-    const diff = day === 0 ? -6 : 1 - day
-    const monday = new Date(date)
-    monday.setDate(date.getDate() + diff)
-    return monday.toISOString().slice(0, 10)
-  }
-
-  function getWeekLabel(mondayStr) {
-    const monday = new Date(mondayStr + 'T00:00:00')
-    const sunday = new Date(monday)
-    sunday.setDate(monday.getDate() + 6)
-    const fmt = d => d.toLocaleDateString('it-IT', { day: 'numeric', month: 'short' })
-    return `${fmt(monday)} – ${fmt(sunday)}`
-  }
-
-  function togglePagata(key) {
-    const nuove = { ...commissioniPagate, [key]: !commissioniPagate[key] }
-    setCommissioniPagate(nuove)
-    localStorage.setItem('commissioni_pagate', JSON.stringify(nuove))
-  }
-
-  const settimane = mostraSettimane ? Object.values(
-    entrateFiltrate.reduce((acc, e) => {
-      const key = getWeekKey(e.data)
-      if (!acc[key]) acc[key] = { key, lordo: 0, commissione: 0, netto: 0 }
-      acc[key].lordo += e.importo_lordo || 0
-      acc[key].commissione += e.importo_commissione || 0
-      acc[key].netto += e.importo_netto || 0
-      return acc
-    }, {})
-  ).sort((a, b) => b.key.localeCompare(a.key)) : []
+  const totale = totaleCash + totaleCard
 
   return (
     <div className="p-4 max-w-lg mx-auto">
@@ -239,7 +184,6 @@ export default function Entrate() {
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: a.colore }} />
                   <span className="text-sm text-slate-700">{a.nome}</span>
-                  {a.commissione_percentuale_default > 0 && <span className="text-xs text-orange-500">{a.commissione_percentuale_default}%</span>}
                 </div>
                 <button onClick={() => handleDeleteAttivita(a.id)} className="text-slate-300 hover:text-red-500 text-xl leading-none px-1">×</button>
               </div>
@@ -248,19 +192,13 @@ export default function Entrate() {
           {showNuova ? (
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 flex flex-col gap-2">
               <input type="text" placeholder="Nome attività" value={nuova.nome} onChange={e => setNuova(f => ({ ...f, nome: e.target.value }))} autoFocus className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <label className="text-xs text-slate-500 mb-0.5 block">Commissione %</label>
-                  <input type="number" min="0" max="100" step="0.5" value={nuova.commissione_percentuale_default} onChange={e => setNuova(f => ({ ...f, commissione_percentuale_default: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
-                </div>
-                <div className="flex-1">
-                  <label className="text-xs text-slate-500 mb-0.5 block">Categoria</label>
-                  <select value={nuova.epigrafe} onChange={e => setNuova(f => ({ ...f, epigrafe: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
-                    <option value="actividades">Tour / Escursioni</option>
-                    <option value="fotografo">Fotografia</option>
-                    <option value="altro">Altro</option>
-                  </select>
-                </div>
+              <div>
+                <label className="text-xs text-slate-500 mb-0.5 block">Categoria</label>
+                <select value={nuova.epigrafe} onChange={e => setNuova(f => ({ ...f, epigrafe: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+                  <option value="actividades">Tour / Escursioni</option>
+                  <option value="fotografo">Fotografia</option>
+                  <option value="altro">Altro</option>
+                </select>
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowNuova(false)} className="flex-1 border border-slate-300 text-slate-600 rounded-lg py-2 text-sm">Annulla</button>
@@ -294,59 +232,20 @@ export default function Entrate() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 mb-5">
-        <div className="bg-green-50 rounded-xl p-3 border border-green-100">
-          <p className="text-xs text-green-700 font-medium">Netto totale</p>
-          <p className="text-xl font-bold text-green-800">{formatEur(totaleNetto)}</p>
-        </div>
-        <div className="bg-orange-50 rounded-xl p-3 border border-orange-100">
-          <p className="text-xs text-orange-700 font-medium">Commissioni da pagare</p>
-          <p className="text-xl font-bold text-orange-800">{formatEur(totaleCommissioni)}</p>
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="bg-green-50 rounded-xl p-3 border border-green-100 col-span-1">
+          <p className="text-xs text-green-700 font-medium">Totale</p>
+          <p className="text-lg font-bold text-green-800">{formatEur(totale)}</p>
         </div>
         <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
-          <p className="text-xs text-slate-600 font-medium">Cash incassato</p>
-          <p className="text-xl font-bold text-slate-800">{formatEur(totaleCash)}</p>
+          <p className="text-xs text-slate-600 font-medium">Cash</p>
+          <p className="text-lg font-bold text-slate-800">{formatEur(totaleCash)}</p>
         </div>
         <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
-          <p className="text-xs text-blue-700 font-medium">Card incassato</p>
-          <p className="text-xl font-bold text-blue-800">{formatEur(totaleCard)}</p>
+          <p className="text-xs text-blue-700 font-medium">Card</p>
+          <p className="text-lg font-bold text-blue-800">{formatEur(totaleCard)}</p>
         </div>
       </div>
-
-      {mostraSettimane && settimane.length > 0 && (() => {
-        const chiave = settimanaSelezionata || settimane[0].key
-        const s = settimane.find(s => s.key === chiave) || settimane[0]
-        const pagata = !!commissioniPagate[chiave]
-        return (
-          <div className={`rounded-2xl border p-4 mb-5 ${pagata ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-slate-700">Commissioni guida</h3>
-              <span className="text-xs text-slate-400">{attivitaFiltrata.commissione_percentuale_default}%</span>
-            </div>
-            <select
-              value={chiave}
-              onChange={e => setSettimanaSelezionata(e.target.value)}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white mb-3"
-            >
-              {settimane.map(s => (
-                <option key={s.key} value={s.key}>{getWeekLabel(s.key)} {commissioniPagate[s.key] ? '✓ pagata' : ''}</option>
-              ))}
-            </select>
-            <div className="flex justify-between items-center mb-3">
-              <span className={`text-sm font-medium ${pagata ? 'text-green-700' : 'text-orange-600'}`}>
-                {pagata ? 'Pagata alla guida' : 'Da pagare alla guida'}
-              </span>
-              <span className={`text-xl font-bold ${pagata ? 'text-green-700' : 'text-orange-600'}`}>{formatEur(s.commissione)}</span>
-            </div>
-            <button
-              onClick={() => togglePagata(chiave)}
-              className={`w-full py-2.5 rounded-xl text-sm font-semibold ${pagata ? 'bg-slate-100 text-slate-600' : 'bg-orange-500 text-white'}`}
-            >
-              {pagata ? 'Segna come non pagata' : 'Segna come pagata'}
-            </button>
-          </div>
-        )
-      })()}
 
       {showForm && (
         <form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200 p-4 mb-5 flex flex-col gap-3">
@@ -356,7 +255,7 @@ export default function Entrate() {
           </div>
           <div>
             <label className="text-xs font-medium text-slate-600 mb-1 block">Attività</label>
-            <select value={form.attivita_id} onChange={e => handleAttivitaChange(e.target.value)} required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
+            <select value={form.attivita_id} onChange={e => setForm(f => ({ ...f, attivita_id: e.target.value }))} required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white">
               <option value="">Seleziona...</option>
               {attivita.filter(a => a.attiva).map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
             </select>
@@ -372,20 +271,10 @@ export default function Entrate() {
             </div>
           </div>
           {lordo > 0 && (
-            <div className="bg-slate-50 rounded-xl p-3 space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Lordo</span>
-                <span className="font-medium">{formatEur(lordo)}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500 flex-1">Commissione</span>
-                <input type="number" min="0" max="100" step="0.5" value={form.commissione_percentuale} onChange={e => setForm(f => ({ ...f, commissione_percentuale: e.target.value }))} className="w-16 border border-slate-300 rounded px-2 py-0.5 text-sm text-right" />
-                <span className="text-slate-500">%</span>
-                <span className="font-medium text-orange-600 ml-1">{formatEur(commissione)}</span>
-              </div>
-              <div className="flex justify-between border-t border-slate-200 pt-1.5 font-semibold">
-                <span className="text-green-700">Netto</span>
-                <span className="text-green-700">{formatEur(netto)}</span>
+            <div className="bg-green-50 rounded-xl p-3 text-sm">
+              <div className="flex justify-between font-semibold text-green-700">
+                <span>Totale</span>
+                <span>{formatEur(lordo)}</span>
               </div>
             </div>
           )}
@@ -407,20 +296,19 @@ export default function Entrate() {
               <div>
                 <p className="font-medium text-slate-800 text-sm">{e.attivita_nome}</p>
                 <p className="text-xs text-slate-400">{formatData(e.data)}</p>
+                {e.note && <p className="text-xs text-slate-400 mt-0.5">{e.note}</p>}
               </div>
               <div className="text-right">
-                <p className="font-bold text-green-700">{formatEur(e.importo_netto)}</p>
-                {e.importo_commissione > 0 && <p className="text-xs text-orange-600">comm. {formatEur(e.importo_commissione)}</p>}
+                <p className="font-bold text-green-700">{formatEur(e.importo_lordo || e.importo_netto)}</p>
+                {(e.importo_cash > 0 || e.importo_card > 0) && (
+                  <div className="flex gap-2 mt-0.5 text-xs text-slate-500 justify-end">
+                    {e.importo_cash > 0 && <span>Cash {formatEur(e.importo_cash)}</span>}
+                    {e.importo_cash > 0 && e.importo_card > 0 && <span>·</span>}
+                    {e.importo_card > 0 && <span>Card {formatEur(e.importo_card)}</span>}
+                  </div>
+                )}
               </div>
             </div>
-            {(e.importo_cash > 0 || e.importo_card > 0) && (
-              <div className="flex gap-2 mt-1.5 text-xs text-slate-500">
-                {e.importo_cash > 0 && <span>Cash {formatEur(e.importo_cash)}</span>}
-                {e.importo_cash > 0 && e.importo_card > 0 && <span>·</span>}
-                {e.importo_card > 0 && <span>Card {formatEur(e.importo_card)}</span>}
-              </div>
-            )}
-            {e.note && <p className="text-xs text-slate-400 mt-1">{e.note}</p>}
             <button onClick={() => handleDelete(e.id)} className="text-xs text-red-400 mt-1.5 hover:text-red-600">Elimina</button>
           </div>
         ))}
