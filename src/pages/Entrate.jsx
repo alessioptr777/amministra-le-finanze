@@ -17,6 +17,7 @@ const EMPTY_FORM = {
   importo_cash: '',
   importo_card: '',
   note: '',
+  dichiara: true,
 }
 
 const EMPTY_NUOVA = { nome: '', epigrafe: 'actividades' }
@@ -87,6 +88,7 @@ export default function Entrate() {
         importo_lordo: lordo,
         importo_netto: lordo,
         note: form.note,
+        dichiara: form.dichiara,
       })
       if (error) throw error
       setForm(EMPTY_FORM)
@@ -107,6 +109,7 @@ export default function Entrate() {
       importo_cash: String(e.importo_cash || ''),
       importo_card: String(e.importo_card || ''),
       note: e.note || '',
+      dichiara: e.dichiara !== false,
     })
   }
 
@@ -128,6 +131,7 @@ export default function Entrate() {
         importo_lordo: totale,
         importo_netto: totale,
         note: editForm.note,
+        dichiara: editForm.dichiara,
       }).eq('id', id)
       if (error) throw error
       setEditandoId(null)
@@ -325,6 +329,16 @@ export default function Entrate() {
             <label className="text-xs font-medium text-slate-600 mb-1 block">Note (opzionale)</label>
             <input type="text" placeholder="es. gruppo di 8 persone" value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
           </div>
+          <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium text-slate-700">Dichiara al fisco</p>
+              <p className="text-xs text-slate-400">se off, non entra nel Mod 130</p>
+            </div>
+            <button type="button" onClick={() => setForm(f => ({ ...f, dichiara: !f.dichiara }))}
+              className={`w-12 h-6 rounded-full transition-colors ${form.dichiara ? 'bg-green-500' : 'bg-slate-300'}`}>
+              <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${form.dichiara ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
+          </div>
           <button type="submit" disabled={saving || lordo === 0 || !form.attivita_id} className="bg-green-600 text-white rounded-xl py-3 font-semibold disabled:opacity-40">
             {saving ? 'Salvo...' : 'Salva entrata'}
           </button>
@@ -364,6 +378,16 @@ export default function Entrate() {
                     <label className="text-xs font-medium text-slate-600 mb-1 block">Note</label>
                     <input type="text" value={editForm.note} onChange={ev => setEditForm(f => ({ ...f, note: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                   </div>
+                  <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Dichiara al fisco</p>
+                      <p className="text-xs text-slate-400">se off, non entra nel Mod 130</p>
+                    </div>
+                    <button type="button" onClick={() => setEditForm(f => ({ ...f, dichiara: !f.dichiara }))}
+                      className={`w-12 h-6 rounded-full transition-colors ${editForm.dichiara ? 'bg-green-500' : 'bg-slate-300'}`}>
+                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${editForm.dichiara ? 'translate-x-6' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
                   <div className="flex gap-2">
                     <button onClick={() => setEditandoId(null)} className="flex-1 border border-slate-300 text-slate-600 rounded-lg py-2 text-sm">Annulla</button>
                     <button onClick={() => handleSaveEdit(e.id)} disabled={savingEdit} className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-40">
@@ -390,9 +414,14 @@ export default function Entrate() {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-3 mt-1.5">
-                    <button onClick={() => startEdit(e)} className="text-xs text-blue-500 hover:text-blue-700">Modifica</button>
-                    <button onClick={() => handleDelete(e.id)} className="text-xs text-red-400 hover:text-red-600">Elimina</button>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <div className="flex gap-3">
+                      <button onClick={() => startEdit(e)} className="text-xs text-blue-500 hover:text-blue-700">Modifica</button>
+                      <button onClick={() => handleDelete(e.id)} className="text-xs text-red-400 hover:text-red-600">Elimina</button>
+                    </div>
+                    {e.dichiara === false && (
+                      <span className="text-xs text-slate-400 italic">non dichiarata</span>
+                    )}
                   </div>
                 </>
               )}
