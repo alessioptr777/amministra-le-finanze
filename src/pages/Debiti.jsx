@@ -114,17 +114,6 @@ export default function Debiti() {
     }
   }
 
-  async function handlePagaRata(debito) {
-    const nuovoPagato = Math.min((debito.importo_pagato || 0) + debito.rata_mensile, debito.importo_totale)
-    try {
-      const { error } = await supabase.from('debiti').update({ importo_pagato: nuovoPagato }).eq('id', debito.id)
-      if (error) throw error
-      loadDebiti()
-    } catch (err) {
-      alert('Errore: ' + err.message)
-    }
-  }
-
   async function handleDelete(id) {
     try {
       const { error } = await supabase.from('debiti').delete().eq('id', id)
@@ -135,8 +124,23 @@ export default function Debiti() {
     }
   }
 
+  function calcRatePagate(debito) {
+    if (!debito.data_prima_rata || !debito.giorno_addebito) return debito.importo_pagato || 0
+    const oggi = new Date()
+    const inizio = new Date(debito.data_prima_rata + 'T00:00:00')
+    let ratePagate = 0
+    let dataRata = new Date(inizio)
+    dataRata.setDate(debito.giorno_addebito)
+    while (dataRata <= oggi) {
+      ratePagate++
+      dataRata.setMonth(dataRata.getMonth() + 1)
+    }
+    return Math.min(ratePagate * debito.rata_mensile, debito.importo_totale)
+  }
+
   function calcMesiRimanenti(debito, extraMensile = 0) {
-    const residuo = debito.importo_totale - (debito.importo_pagato || 0)
+    const importoPagatoAuto = calcRatePagate(debito)
+    const residuo = debito.importo_totale - importoPagatoAuto
     const rata = debito.rata_mensile + extraMensile
     if (rata <= 0 || residuo <= 0) return 0
     return Math.ceil(residuo / rata)
@@ -275,9 +279,10 @@ export default function Debiti() {
 
       <div className="flex flex-col gap-4">
         {debiti.map(debito => {
-          const residuo = Math.max(0, debito.importo_totale - (debito.importo_pagato || 0))
-          const percentuale = debito.importo_totale > 0 ? Math.min(100, ((debito.importo_pagato || 0) / debito.importo_totale) * 100) : 0
-          const rateEseguite = debito.rata_mensile > 0 ? Math.floor((debito.importo_pagato || 0) / debito.rata_mensile) : 0
+          const importoPagato = calcRatePagate(debito)
+          const residuo = Math.max(0, debito.importo_totale - importoPagato)
+          const percentuale = debito.importo_totale > 0 ? Math.min(100, (importoPagato / debito.importo_totale) * 100) : 0
+          const rateEseguite = debito.rata_mensile > 0 ? Math.floor(importoPagato / debito.rata_mensile) : 0
           const rateTotali = debito.rata_mensile > 0 ? Math.ceil(debito.importo_totale / debito.rata_mensile) : 0
           const estinto = residuo <= 0
           const extraSimula = parseFloat(simula[debito.id] || 0)
@@ -319,7 +324,7 @@ export default function Debiti() {
                   <div className="mb-3">
                     <div className="flex justify-between text-xs text-slate-500 mb-1">
                       <span>{rateEseguite} rate su {rateTotali} pagate</span>
-                      <span>{formatEur(debito.importo_pagato || 0)} su {formatEur(debito.importo_totale)}</span>
+                      <span>{formatEur(importoPagato)} su {formatEur(debito.importo_totale)}</span>
                     </div>
                     <div className="w-full bg-slate-100 rounded-full h-2.5">
                       <div className={`h-2.5 rounded-full transition-all ${estinto ? 'bg-green-500' : 'bg-red-500'}`} style={{ width: `${percentuale}%` }} />
@@ -357,11 +362,6 @@ export default function Debiti() {
                   )}
 
                   <div className="flex gap-2">
-                    {!estinto && (
-                      <button onClick={() => handlePagaRata(debito)} className="flex-1 bg-blue-600 text-white rounded-xl py-2 text-sm font-semibold">
-                        Segna rata pagata ({formatEur(debito.rata_mensile)})
-                      </button>
-                    )}
                     <button onClick={() => handleDelete(debito.id)} className="px-3 py-2 text-red-400 text-sm hover:text-red-600 border border-red-100 rounded-xl">Elimina</button>
                   </div>
                 </>
