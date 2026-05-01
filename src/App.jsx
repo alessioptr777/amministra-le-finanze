@@ -10,6 +10,7 @@ import Debiti from './pages/Debiti'
 import SpeseFisse from './pages/SpeseFisse'
 import Budget from './pages/Budget'
 import Impostazioni from './pages/Impostazioni'
+import Test from './pages/Test'
 
 const navItems = [
   { to: '/', label: 'Home', icon: '🏠' },
@@ -90,6 +91,7 @@ function AppShell() {
           <Route path="/fisse" element={<SpeseFisse />} />
           <Route path="/budget" element={<Budget />} />
           <Route path="/impostazioni" element={<Impostazioni />} />
+          <Route path="/test" element={<Test />} />
         </Routes>
       </main>
       <BottomNav />
