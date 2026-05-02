@@ -218,6 +218,19 @@ export default function Spese() {
           </div>
 
           <div>
+            <label className="text-xs font-medium text-slate-600 mb-1 block">Pagato con</label>
+            <div className="flex gap-2">
+              {[{ val: 'card', label: '💳 Card / Banca' }, { val: 'cash', label: '💵 Contanti' }].map(opt => (
+                <button key={opt.val} type="button"
+                  onClick={() => setForm(f => ({ ...f, metodo_pagamento: opt.val }))}
+                  className={`flex-1 py-2 rounded-lg text-sm border font-medium ${form.metodo_pagamento === opt.val ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-300 text-slate-600'}`}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <label className="text-xs font-medium text-slate-600 mb-1 block">Descrizione (opzionale)</label>
             <input type="text" placeholder="es. cena con cliente" value={form.descrizione} onChange={e => setForm(f => ({ ...f, descrizione: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
           </div>
@@ -302,6 +315,7 @@ export default function Spese() {
               </div>
               <div className="text-right">
                 <p className="font-bold text-red-600">{formatEur(s.importo)}</p>
+                <p className="text-xs text-slate-400">{s.metodo_pagamento === 'cash' ? '💵 contanti' : '💳 card'}</p>
                 {s.deducibile && <span className="text-xs text-green-600 font-medium">deducibile</span>}
                 {s.foto_url && <a href={s.foto_url} target="_blank" rel="noreferrer" className="text-xs text-blue-500 block">foto</a>}
               </div>

@@ -117,7 +117,7 @@ export default function Dashboard() {
     try {
       const [eRes, sRes, feRes, frRes, sfRes, debRes, rateRes] = await Promise.all([
         supabase.from('entrate').select('importo_cash,cash_dichiarato,importo_card,importo_lordo').gte('data', INIZIO).lte('data', oggi),
-        supabase.from('spese').select('importo').gte('data', INIZIO).lte('data', oggi),
+        supabase.from('spese').select('importo,metodo_pagamento').gte('data', INIZIO).lte('data', oggi),
         supabase.from('fatture_emesse').select('totale').gte('data', INIZIO).lte('data', oggi),
         supabase.from('fatture_ricevute').select('totale').gte('data', INIZIO).lte('data', oggi),
         supabase.from('spese_fisse').select('importo'),
@@ -133,7 +133,10 @@ export default function Dashboard() {
       const contanti = entrate.reduce((s, e) => s + Math.max(0, (e.importo_cash || 0) - (e.cash_dichiarato || 0)), 0)
 
       const feCum = (feRes.data || []).reduce((s, f) => s + (f.totale || 0), 0)
-      const speseCum = (sRes.data || []).reduce((s, e) => s + (e.importo || 0), 0)
+      const spese = sRes.data || []
+      const speseCashCum = spese.filter(e => e.metodo_pagamento === 'cash').reduce((s, e) => s + (e.importo || 0), 0)
+      const speseCardCum = spese.filter(e => e.metodo_pagamento !== 'cash').reduce((s, e) => s + (e.importo || 0), 0)
+      const speseCum = speseCashCum + speseCardCum
       const frCum = (frRes.data || []).reduce((s, f) => s + (f.totale || 0), 0)
       const nowDate = new Date()
       const mesiTrascorsi = (nowDate.getFullYear() - 2026) * 12 + (nowDate.getMonth() - 3) + 1
@@ -142,11 +145,11 @@ export default function Dashboard() {
       const idsFissi = new Set(debiti.filter(d => d.rata_mensile > 0).map(d => d.id))
       const rateFisseCum = debiti.filter(d => d.rata_mensile > 0).reduce((s, d) => s + d.rata_mensile, 0) * mesiTrascorsi
       const rateVarCum = (rateRes.data || []).filter(r => !idsFissi.has(r.debito_id)).reduce((s, r) => s + r.importo, 0)
+      const usciteBanca = speseCardCum + frCum + speseFisseCum + rateFisseCum + rateVarCum
       const usciteTotali = speseCum + frCum + speseFisseCum + rateFisseCum + rateVarCum
-      // Fatture emesse entrano nel conto bancario
       setSaldoConto(entrateTotale + feCum - usciteTotali)
-      setSaldoBanca(entrateBanca + feCum - usciteTotali)
-      setSaldoContanti(contanti)
+      setSaldoBanca(entrateBanca + feCum - usciteBanca)
+      setSaldoContanti(contanti - speseCashCum)
     } catch (err) {
       console.error('Errore saldo conto:', err.message)
     }
