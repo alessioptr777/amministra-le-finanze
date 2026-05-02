@@ -19,7 +19,7 @@ const navItems = [
   { to: '/fatture', label: 'Fatture', icon: '🧾' },
   { to: '/debiti', label: 'Debiti', icon: '📉' },
   { to: '/fisse', label: 'Fisse', icon: '📌' },
-  { to: '/budget', label: 'Budget', icon: '📊' },
+  { to: '/budget', label: 'Tasse', icon: '📊' },
   { to: '/impostazioni', label: 'Settings', icon: '⚙️' },
 ]
 
