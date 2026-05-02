@@ -17,6 +17,8 @@ const EMPTY_FORM = {
   importo: '',
   metodo_pagamento: 'card',
   descrizione: '',
+  deducibile: false,
+  igic_percentuale: '0',
 }
 
 export default function Spese() {
@@ -118,6 +120,8 @@ export default function Spese() {
         metodo_pagamento: form.metodo_pagamento,
         descrizione: form.descrizione,
         foto_url,
+        deducibile: form.deducibile,
+        igic_percentuale: form.deducibile ? (parseFloat(form.igic_percentuale) || 0) : 0,
       })
       if (error) throw error
       setForm(f => ({ ...EMPTY_FORM, data: f.data }))
@@ -153,7 +157,7 @@ export default function Spese() {
           {showForm ? 'Chiudi' : '+ Aggiungi'}
         </button>
       </div>
-      <p className="text-xs text-slate-400 mb-4">Spese personali · non deducibili fiscalmente</p>
+      <p className="text-xs text-slate-400 mb-4">Spese variabili · attiva "Deducibile" per includerle nel Mod 130</p>
 
       {showForm && (
         <form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200 p-4 mb-5 flex flex-col gap-3">
@@ -218,6 +222,32 @@ export default function Spese() {
             <input type="text" placeholder="es. cena con cliente" value={form.descrizione} onChange={e => setForm(f => ({ ...f, descrizione: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
           </div>
 
+          <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium text-slate-700">Deducibile</p>
+              <p className="text-xs text-slate-400">entra nel Mod 130 come costo</p>
+            </div>
+            <button type="button" onClick={() => setForm(f => ({ ...f, deducibile: !f.deducibile }))}
+              className={`w-12 h-6 rounded-full transition-colors ${form.deducibile ? 'bg-green-500' : 'bg-slate-300'}`}>
+              <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${form.deducibile ? 'translate-x-6' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {form.deducibile && (
+            <div>
+              <label className="text-xs font-medium text-slate-600 mb-1 block">IGIC inclusa</label>
+              <div className="flex gap-2">
+                {[{ val: '0', label: '0% (esente)' }, { val: '7', label: '7% (standard)' }].map(opt => (
+                  <button key={opt.val} type="button"
+                    onClick={() => setForm(f => ({ ...f, igic_percentuale: opt.val }))}
+                    className={`flex-1 py-2 rounded-lg text-sm border font-medium ${form.igic_percentuale === opt.val ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-300 text-slate-600'}`}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <label className="text-xs font-medium text-slate-600 mb-1 block">Foto scontrino (opzionale)</label>
             {fotoPreview ? (
@@ -272,6 +302,7 @@ export default function Spese() {
               </div>
               <div className="text-right">
                 <p className="font-bold text-red-600">{formatEur(s.importo)}</p>
+                {s.deducibile && <span className="text-xs text-green-600 font-medium">deducibile</span>}
                 {s.foto_url && <a href={s.foto_url} target="_blank" rel="noreferrer" className="text-xs text-blue-500 block">foto</a>}
               </div>
             </div>
