@@ -6,21 +6,45 @@ function formatEur(n) {
   return '€' + Number(n || 0).toFixed(2).replace('.', ',')
 }
 
+function fmtBig(n) {
+  const v = Number(n || 0)
+  return (v < 0 ? '-€' : '€') + Math.abs(v).toFixed(0)
+}
+
+function DonutRing({ value, max, size = 220, strokeWidth = 18, color = '#60a5fa' }) {
+  const r = (size - strokeWidth) / 2
+  const circ = 2 * Math.PI * r
+  const pct = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0
+  const dash = circ * pct
+  return (
+    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#1e293b" strokeWidth={strokeWidth} />
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={strokeWidth}
+        strokeDasharray={`${dash} ${circ}`} strokeLinecap="round"
+        style={{ transition: 'stroke-dasharray 0.6s ease' }} />
+    </svg>
+  )
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return ''
   const [y, m, d] = dateStr.split('-')
   return `${d}/${m}/${y}`
 }
 
+function fmtDataBreve(dateStr) {
+  if (!dateStr) return ''
+  const [, m, d] = dateStr.split('-')
+  const mesi = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre']
+  return `${parseInt(d)} ${mesi[parseInt(m)-1]}`
+}
+
 function getMeseLabel(anno, mese) {
   return new Date(anno, mese - 1, 1).toLocaleString('it-IT', { month: 'long', year: 'numeric' })
 }
 
-function getInfoTrimestre() {
-  const now = new Date()
-  const m = now.getMonth()
-  const anno = now.getFullYear()
-  const q = Math.floor(m / 3) + 1
+function getInfoTrimestre(anno, mese) {
+  const q = Math.floor((mese - 1) / 3) + 1
   const startMese = (q - 1) * 3 + 1
   const endMese = q * 3
   const labels = ['gen-mar', 'apr-giu', 'lug-set', 'ott-dic']
@@ -30,7 +54,7 @@ function getInfoTrimestre() {
     q, anno,
     label: `T${q} ${anno} · ${labels[q - 1]}`,
     deadline: `${deadlines[q - 1]} ${deadlineAnno}`,
-    startAnno: `${anno}-01-01`,
+    startAnno: '2026-04-01',
     start: `${anno}-${String(startMese).padStart(2, '0')}-01`,
     end: new Date(anno, endMese, 0).toISOString().slice(0, 10),
   }
@@ -76,11 +100,20 @@ export default function Dashboard() {
   const [saldoConto, setSaldoConto] = useState(null)
   const [saldoBanca, setSaldoBanca] = useState(null)
   const [saldoContanti, setSaldoContanti] = useState(null)
+  const [versamentiMese, setVersamentiMese] = useState([])
+  const [prossimaRata, setProssimaRata] = useState(null)
+  const [entrateTS, setEntrateTS] = useState([])
+  const [commissioneRecord, setCommissioneRecord] = useState(null)
+  const [showAzzera, setShowAzzera] = useState(false)
+  const [azzeraInput, setAzzeraInput] = useState('')
+  const [savingAzzera, setSavingAzzera] = useState(false)
+  const [accontoInput, setAccontoInput] = useState('')
+  const [savingAcconto, setSavingAcconto] = useState(false)
 
   const meseStr = `${anno}-${String(mese).padStart(2, '0')}`
   const ultimoGiorno = new Date(anno, mese, 0).getDate()
   const dataFine = `${meseStr}-${ultimoGiorno}`
-  const infoQ = getInfoTrimestre()
+  const infoQ = getInfoTrimestre(anno, mese)
   const infoW = getSettimanaCorrente()
 
   useEffect(() => { loadDati() }, [anno, mese, location.key])
@@ -90,13 +123,14 @@ export default function Dashboard() {
   async function loadDati() {
     setLoading(true)
     try {
-      const [eRes, sRes, aRes, feRes, frRes, sfRes] = await Promise.all([
+      const [eRes, sRes, aRes, feRes, frRes, sfRes, vRes] = await Promise.all([
         supabase.from('entrate').select('*').gte('data', `${meseStr}-01`).lte('data', dataFine),
         supabase.from('spese').select('*').gte('data', `${meseStr}-01`).lte('data', dataFine),
         supabase.from('attivita').select('*'),
         supabase.from('fatture_emesse').select('*').gte('data', `${meseStr}-01`).lte('data', dataFine),
         supabase.from('fatture_ricevute').select('*').gte('data', `${meseStr}-01`).lte('data', dataFine),
         supabase.from('spese_fisse').select('*'),
+        supabase.from('versamenti').select('importo').gte('data', `${meseStr}-01`).lte('data', dataFine),
       ])
       setEntrate(eRes.data || [])
       setSpese(sRes.data || [])
@@ -104,6 +138,7 @@ export default function Dashboard() {
       setFattureEmesse(feRes.data || [])
       setFattureRicevute(frRes.data || [])
       setSpeseFisse(sfRes.data || [])
+      setVersamentiMese(vRes.data || [])
     } catch (err) {
       console.error('Errore dashboard:', err.message)
     } finally {
@@ -115,7 +150,7 @@ export default function Dashboard() {
     const INIZIO = '2026-04-01'
     const oggi = new Date().toISOString().slice(0, 10)
     try {
-      const [eRes, sRes, feRes, frRes, sfRes, debRes, rateRes] = await Promise.all([
+      const [eRes, sRes, feRes, frRes, sfRes, debRes, rateRes, versRes] = await Promise.all([
         supabase.from('entrate').select('importo_cash,cash_dichiarato,importo_card,importo_lordo').gte('data', INIZIO).lte('data', oggi),
         supabase.from('spese').select('importo,metodo_pagamento').gte('data', INIZIO).lte('data', oggi),
         supabase.from('fatture_emesse').select('totale').gte('data', INIZIO).lte('data', oggi),
@@ -123,6 +158,7 @@ export default function Dashboard() {
         supabase.from('spese_fisse').select('importo'),
         supabase.from('debiti').select('id,rata_mensile'),
         supabase.from('rate_debito').select('importo,debito_id').gte('data_scadenza', INIZIO).lte('data_scadenza', oggi),
+        supabase.from('versamenti').select('importo').gte('data', INIZIO).lte('data', oggi),
       ])
       const entrate = eRes.data || []
       // Tutto quello che è entrato fisicamente (cash lordo + card)
@@ -145,11 +181,12 @@ export default function Dashboard() {
       const idsFissi = new Set(debiti.filter(d => d.rata_mensile > 0).map(d => d.id))
       const rateFisseCum = debiti.filter(d => d.rata_mensile > 0).reduce((s, d) => s + d.rata_mensile, 0) * mesiTrascorsi
       const rateVarCum = (rateRes.data || []).filter(r => !idsFissi.has(r.debito_id)).reduce((s, r) => s + r.importo, 0)
+      const versamentiCum = (versRes.data || []).reduce((s, v) => s + v.importo, 0)
       const usciteBanca = speseCardCum + frCum + speseFisseCum + rateFisseCum + rateVarCum
       const usciteTotali = speseCum + frCum + speseFisseCum + rateFisseCum + rateVarCum
       setSaldoConto(entrateTotale + feCum - usciteTotali)
-      setSaldoBanca(entrateBanca + feCum - usciteBanca)
-      setSaldoContanti(contanti - speseCashCum)
+      setSaldoBanca(entrateBanca + feCum - usciteBanca + versamentiCum)
+      setSaldoContanti(contanti - speseCashCum - versamentiCum)
     } catch (err) {
       console.error('Errore saldo conto:', err.message)
     }
@@ -161,17 +198,23 @@ export default function Dashboard() {
       // Mod 130 cumulative (Jan 1 → fine trimestre), Mod 420 solo trimestre corrente
       const meseStr = `${anno}-${String(mese).padStart(2, '0')}`
       const ultimoGiornoMese = new Date(anno, mese, 0).getDate()
-      const [feYTD, frYTD, enYTD, feQ, frQ, enQ, debRes, rateMeseRes, spDedYTD, spDedQ] = await Promise.all([
+      const oggi = new Date().toISOString().slice(0, 10)
+      const [feYTD, frYTD, enYTD, feQ, frQ, enQ, debRes, rateMeseRes, spDedYTD, spDedQ, versYTD, versQ, prossRataRes, entrateTSRes, commissioneRes] = await Promise.all([
         supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', startAnno).lte('data', end),
         supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', startAnno).lte('data', end),
         supabase.from('entrate').select('importo_netto').gte('data', startAnno).lte('data', end).neq('dichiara', false),
         supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', start).lte('data', end),
         supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', start).lte('data', end),
         supabase.from('entrate').select('importo_netto,igic_percentuale,cash_dichiarato,importo_card').gte('data', start).lte('data', end).neq('dichiara', false),
-        supabase.from('debiti').select('id,nome,rata_mensile,importo_totale,importo_pagato,igic_percentuale,deducibile'),
-        supabase.from('rate_debito').select('id,importo,debito_id,data_scadenza,pagato,numero_rata').gte('data_scadenza', `${meseStr}-01`).lte('data_scadenza', `${meseStr}-${ultimoGiornoMese}`),
+        supabase.from('debiti').select('id,nome,rata_mensile,importo_totale,importo_pagato,igic_percentuale,deducibile,data_fine'),
+        supabase.from('rate_debito').select('id,importo,debito_id,data_scadenza,pagato,numero_rata').gte('data_scadenza', `${meseStr}-01`).lte('data_scadenza', `${meseStr}-${ultimoGiornoMese}`).eq('pagato', false),
         supabase.from('spese').select('importo,igic_percentuale').eq('deducibile', true).gte('data', startAnno).lte('data', end),
         supabase.from('spese').select('importo,igic_percentuale').eq('deducibile', true).gte('data', start).lte('data', end),
+        supabase.from('versamenti').select('importo,igic_percentuale').gte('data', startAnno).lte('data', end),
+        supabase.from('versamenti').select('importo,igic_percentuale').gte('data', start).lte('data', end),
+        supabase.from('rate_debito').select('importo,debito_id,data_scadenza').eq('pagato', false).gte('data_scadenza', oggi).order('data_scadenza', { ascending: true }).limit(1),
+        supabase.from('entrate').select('importo_lordo').gte('data', start).lte('data', end).eq('attivita_nome', 'Tenerife Stars'),
+        supabase.from('commissioni_guida').select('*').eq('anno', infoQ.anno).eq('trimestre', infoQ.q).maybeSingle(),
       ])
       const tuttiDebiti = debRes.data || []
       const attivi = tuttiDebiti.filter(d => (d.importo_totale - (d.importo_pagato || 0)) > 0)
@@ -188,10 +231,18 @@ export default function Dashboard() {
         debitiDeducibili: attivi.filter(d => d.deducibile),
         speseDedYTD: spDedYTD.data || [],
         speseDedQ: spDedQ.data || [],
+        versYTD: versYTD.data || [],
+        versQ: versQ.data || [],
       })
       setDebitiAttivi(attivi)
       setRateMese((rateMeseRes.data || []).filter(r => !idsFissi.has(r.debito_id)))
       setDebitiMap(mapDebiti)
+      const pr = prossRataRes.data?.[0] || null
+      setProssimaRata(pr ? { ...pr, nomeDebito: mapDebiti[pr.debito_id] || 'Debito' } : null)
+      setEntrateTS(entrateTSRes.data || [])
+      const rec = commissioneRes.data
+      setCommissioneRecord(rec)
+      setAccontoInput(rec?.acconto > 0 ? String(rec.acconto) : '')
     } catch (err) {
       console.error('Errore trimestre:', err.message)
     }
@@ -226,6 +277,54 @@ export default function Dashboard() {
     }
   }
 
+  async function handleSalvaAcconto() {
+    const importo = parseFloat(String(accontoInput).replace(',', '.')) || 0
+    setSavingAcconto(true)
+    try {
+      await supabase.from('commissioni_guida').upsert(
+        { anno: infoQ.anno, trimestre: infoQ.q, acconto: importo, saldata: false },
+        { onConflict: 'anno,trimestre' }
+      )
+      setCommissioneRecord(prev => ({
+        ...(prev || { anno: infoQ.anno, trimestre: infoQ.q, saldata: false, fattura_importo: null }),
+        acconto: importo,
+      }))
+    } catch (err) {
+      console.error('Errore salva acconto:', err.message)
+    } finally {
+      setSavingAcconto(false)
+    }
+  }
+
+  async function handleAzzera() {
+    const importo = parseFloat(String(azzeraInput).replace(',', '.'))
+    if (!importo || importo <= 0) return
+    setSavingAzzera(true)
+    try {
+      const oggi = new Date().toISOString().slice(0, 10)
+      await Promise.all([
+        supabase.from('fatture_ricevute').insert({
+          data: oggi,
+          fornitore_nome: 'Tenerife Stars',
+          totale: importo,
+          igic_percentuale: 7,
+          note: `Commissione guida T${infoQ.q} ${infoQ.anno}`,
+        }),
+        supabase.from('commissioni_guida').upsert(
+          { anno: infoQ.anno, trimestre: infoQ.q, saldata: true, fattura_importo: importo },
+          { onConflict: 'anno,trimestre' }
+        ),
+      ])
+      setShowAzzera(false)
+      setAzzeraInput('')
+      await Promise.all([loadDati(), loadTrimestre(), loadSettimana()])
+    } catch (err) {
+      console.error('Errore azzera commissione:', err.message)
+    } finally {
+      setSavingAzzera(false)
+    }
+  }
+
   function mesePrecedente() {
     if (mese === 1) { setMese(12); setAnno(a => a - 1) }
     else setMese(m => m - 1)
@@ -235,10 +334,16 @@ export default function Dashboard() {
     else setMese(m => m + 1)
   }
 
-  const totaleNetto = entrate.reduce((s, e) => s + (e.importo_netto || 0), 0)
+  const totaleNetto = entrate.reduce((s, e) => {
+    const cashNonDichiarato = Math.max(0, (e.importo_cash || 0) - (e.cash_dichiarato || 0))
+    return s + (e.importo_netto || 0) + cashNonDichiarato
+  }, 0)
   const totaleCommissioni = entrate.reduce((s, e) => s + (e.importo_commissione || 0), 0)
   const totaleSpese = spese.reduce((s, e) => s + (e.importo || 0), 0)
-  const totaleFattureEmesse = fattureEmesse.reduce((s, f) => s + (f.totale || 0), 0)
+  const totaleFattureEmesse = fattureEmesse.reduce((s, f) => {
+    const perc = f.igic_percentuale ?? 7
+    return s + (perc > 0 ? f.totale * 100 / (100 + perc) : f.totale)
+  }, 0)
   const totaleFattureRicevute = fattureRicevute.reduce((s, f) => s + (f.totale || 0), 0)
   const totaleEntrate = totaleNetto + totaleFattureEmesse
   const totaleUscite = totaleSpese + totaleFattureRicevute
@@ -275,6 +380,10 @@ export default function Dashboard() {
   const ricaviYTD = datiQ
     ? datiQ.feYTD.reduce((s, f) => s + imponibileFattura(f), 0)
       + datiQ.enYTD.reduce((s, e) => s + (e.importo_netto || 0), 0)
+      + datiQ.versYTD.reduce((s, v) => {
+          const perc = v.igic_percentuale || 0
+          return s + (perc > 0 ? v.importo / (1 + perc / 100) : v.importo)
+        }, 0)
     : 0
   function imponibileSpesa(s) {
     const perc = parseFloat(s.igic_percentuale) || 0
@@ -295,6 +404,10 @@ export default function Dashboard() {
         const lordoDich = (e.cash_dichiarato || 0) + (e.importo_card || 0)
         return s + (lordoDich - (e.importo_netto || 0))
       }, 0)
+      + datiQ.versQ.reduce((s, v) => {
+          const perc = v.igic_percentuale || 0
+          return s + (perc > 0 ? v.importo * perc / (100 + perc) : 0)
+        }, 0)
     : 0
   const igicSoportado = datiQ
     ? datiQ.frQ.reduce((s, f) => {
@@ -308,11 +421,14 @@ export default function Dashboard() {
     : 0
 
   // Spese fisse deducibili → entrano nei calcoli tasse automaticamente
-  const mesiYTD = infoQ.q * 3  // 3, 6, 9 o 12 in base al trimestre corrente
+  // Mesi effettivi dall'inizio attività (apr 2026), non trimestre × 3
+  const mesiYTD = Math.max(1, (anno - 2026) * 12 + mese - 3)
   const deducibili = speseFisse.filter(v => v.deducibile)
 
+  const meseSel = `${anno}-${String(mese).padStart(2, '0')}-01`
   const totaleRateFisse = debitiAttivi
     .filter(d => d.rata_mensile > 0)
+    .filter(d => !d.data_fine || d.data_fine >= meseSel)
     .reduce((s, d) => s + d.rata_mensile, 0)
   const totaleRateVariabiliMese = rateMese.reduce((s, r) => s + r.importo, 0)
   const totaleRateMensili = totaleRateFisse + totaleRateVariabiliMese
@@ -330,7 +446,8 @@ export default function Dashboard() {
   }
 
   const costiDedFisseYTD = deducibili.reduce((s, v) => s + imponibileFissa(v), 0) * mesiYTD
-  const igicFisseQ = deducibili.reduce((s, v) => s + igicFissa(v), 0) * 3
+  const mesiTrimestre = Math.min(3, Math.max(1, mese - (infoQ.q - 1) * 3))
+  const igicFisseQ = deducibili.reduce((s, v) => s + igicFissa(v), 0) * mesiTrimestre
 
   // Debiti deducibili attivi (es. renting)
   const debitiDed = datiQ?.debitiDeducibili || []
@@ -342,238 +459,319 @@ export default function Dashboard() {
   const igicDebitiQ = debitiDed.reduce((s, d) => {
     const perc = d.igic_percentuale || 0
     return s + (perc > 0 ? d.rata_mensile * perc / (100 + perc) : 0)
-  }, 0) * 3
+  }, 0) * mesiTrimestre
 
   const profittoYTD = ricaviYTD - costiYTD - costiDedFisseYTD - costiDedDebitiYTD
   const igicSoportadoTotale = igicSoportado + igicFisseQ + igicDebitiQ
   const irpfQ = Math.max(0, profittoYTD * 0.20)
   const igicQ = Math.max(0, igicRepercutido - igicSoportadoTotale)
 
-  const saldoColore = saldo > 0 ? 'text-green-700' : saldo < 0 ? 'text-red-700' : 'text-slate-700'
-  const saldoBg = saldo > 0 ? 'bg-green-50 border-green-100' : saldo < 0 ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-200'
+  // Salva stima tasse mensili per la pagina Risparmi
+  const tasseMensili = (irpfQ + igicQ) / 3
+  if (tasseMensili > 0) localStorage.setItem('tasse_mensili_stima', tasseMensili.toFixed(2))
 
-  const saldoContoBg = saldoConto > 0 ? 'bg-blue-600' : saldoConto < 0 ? 'bg-red-600' : 'bg-slate-700'
+  // Flusso mensile banca vs contanti
+  const entrateBancaMese = entrate.reduce((s, e) => s + (e.cash_dichiarato || 0) + (e.importo_card || 0), 0)
+  const entrateContantiMese = entrate.reduce((s, e) => s + Math.max(0, (e.importo_cash || 0) - (e.cash_dichiarato || 0)), 0)
+  const speseCardMese = spese.filter(e => e.metodo_pagamento !== 'cash').reduce((s, e) => s + (e.importo || 0), 0)
+  const speseCashMese = spese.filter(e => e.metodo_pagamento === 'cash').reduce((s, e) => s + (e.importo || 0), 0)
+  const totaleVersamentiMese = versamentiMese.reduce((s, v) => s + v.importo, 0)
+  const usciteBancaMese = speseCardMese + totaleFattureRicevute + totaleFisso + totaleRateMensili
+  const saldoBancaMese = entrateBancaMese + totaleFattureEmesse - usciteBancaMese + totaleVersamentiMese
+  const saldoContantiMese = entrateContantiMese - speseCashMese - totaleVersamentiMese
+
+  const puntoPareggioMese = totaleFisso + totaleRateMensili + tasseMensili
+  const beneficio = totaleEntrate - totaleSpese - totaleFattureRicevute - puntoPareggioMese
+  const totaleResiduo = debitiAttivi.reduce((s, d) => s + (d.importo_totale - (d.importo_pagato || 0)), 0)
+
+  // Commissione guida Tenerife Stars
+  const commissioneStimata = Math.max(0,
+    entrateTS.reduce((s, e) => s + (e.importo_lordo || 0) * 0.33, 0) - entrateTS.length * 10
+  )
+  const acconto = commissioneRecord?.acconto || 0
+  const ancoraRa = Math.max(0, commissioneStimata - acconto)
+  const beneficioReale = beneficio - ancoraRa
+  const targetReale = totaleSpese + totaleFattureRicevute + puntoPareggioMese + ancoraRa
+  const progPctReale = targetReale > 0 ? Math.min(100, totaleEntrate / targetReale * 100) : 100
+  const giorniTotaliMese = new Date(anno, mese, 0).getDate()
+  const isCurrentMonth = anno === now.getFullYear() && mese === now.getMonth() + 1
+  const giorniRimasti = isCurrentMonth ? Math.max(0, giorniTotaliMese - now.getDate()) : 0
+  const mancaReale = Math.max(0, targetReale - totaleEntrate)
+  const targetGiornalieroReale = giorniRimasti > 0 ? mancaReale / giorniRimasti : 0
 
   return (
-    <div className="p-4 max-w-lg mx-auto">
+    <div className="min-h-screen bg-white pb-24">
+      <div className="max-w-lg mx-auto px-4 pt-6">
 
-      {saldoConto !== null && (
-        <div className={`rounded-2xl p-4 mb-5 ${saldoContoBg}`}>
-          <p className="text-xs font-medium text-white/70 mb-1">Patrimonio netto · da apr 2026</p>
-          <p className="text-4xl font-bold text-white">{formatEur(saldoConto)}</p>
-          <div className="flex gap-4 mt-3 border-t border-white/20 pt-3">
-            <div>
-              <p className="text-xs text-white/60">In banca / card</p>
-              <p className="text-lg font-bold text-white">{formatEur(saldoBanca)}</p>
-            </div>
-            {saldoContanti > 0 && (
-              <div>
-                <p className="text-xs text-white/60">Contanti</p>
-                <p className="text-lg font-bold text-white">{formatEur(saldoContanti)}</p>
-              </div>
-            )}
-          </div>
+        {/* NUMERO PRINCIPALE */}
+        <div className="flex items-center justify-between mb-1">
+          <button onClick={mesePrecedente} className="text-2xl text-slate-300 active:text-slate-500 px-1">‹</button>
+          <p className="text-xs text-slate-400 uppercase tracking-widest">{getMeseLabel(anno, mese)} — quello che è tuo</p>
+          <button onClick={meseSuccessivo} className="text-2xl text-slate-300 active:text-slate-500 px-1">›</button>
         </div>
-      )}
+        <p className={`text-6xl font-bold mb-1 ${beneficio >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+          {beneficio >= 0 ? '+' : ''}{fmtBig(beneficio)}
+        </p>
+        <p className="text-sm text-slate-400 mb-6">dopo spese, rate e tasse</p>
 
-      <div className="flex items-center justify-between mb-5">
-        <button onClick={mesePrecedente} className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 text-slate-600 text-lg">‹</button>
-        <h2 className="font-semibold text-slate-800 capitalize">{getMeseLabel(anno, mese)}</h2>
-        <button onClick={meseSuccessivo} className="w-9 h-9 flex items-center justify-center rounded-full bg-slate-100 text-slate-600 text-lg">›</button>
-      </div>
+        {/* STATO OBIETTIVO */}
+        <p className="text-xs text-slate-400 mb-6">
+          {beneficio >= 0
+            ? `✓ Mese positivo — surplus ${fmtBig(beneficio)}`
+            : `⚠️ Mese in rosso di ${fmtBig(Math.abs(beneficio))} — tasse incluse`}
+        </p>
 
-      {loading ? (
-        <p className="text-center text-slate-400 py-10">Caricamento...</p>
-      ) : (
-        <>
-          <div className={`rounded-2xl border p-4 mb-4 ${saldoBg}`}>
-            <p className="text-xs font-medium text-slate-500 mb-1">Saldo disponibile</p>
-            <p className={`text-3xl font-bold ${saldoColore}`}>{formatEur(saldo)}</p>
-            <p className="text-xs text-slate-400 mt-1">entrate {formatEur(totaleEntrate)} · uscite {formatEur(totaleUscite)}</p>
+        {/* PATRIMONIO */}
+        {saldoBanca !== null && (
+          <div className="bg-slate-50 rounded-2xl p-4 mb-6">
+            <p className="text-xs text-slate-400 uppercase tracking-widest mb-3">Patrimonio netto</p>
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Banca</p>
+                <p className={`text-xl font-bold ${saldoBanca >= 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                  {formatEur(saldoBanca)}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-400 mb-0.5">Contanti</p>
+                <p className={`text-xl font-bold ${saldoContanti >= 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                  {formatEur(saldoContanti)}
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-between border-t border-slate-200 pt-2">
+              <span className="text-xs text-slate-500">Totale</span>
+              <span className={`text-sm font-bold ${saldoConto >= 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                {formatEur(saldoConto)}
+              </span>
+            </div>
           </div>
+        )}
 
-          <div className={`rounded-2xl border p-4 mb-4 ${saldoRealeBg}`}>
-            <div onClick={() => setShowDettaglioSaldo(s => !s)} className="cursor-pointer active:opacity-70">
-              <p className="text-xs font-medium text-slate-500 mb-1">Saldo reale mensile</p>
-              <p className={`text-3xl font-bold ${saldoRealeColore}`}>{formatEur(saldoReale)}</p>
-              <p className="text-xs text-slate-400 mt-1">
-                dopo spese fisse e rate debiti · tap per dettaglio
+        {/* COMMISSIONE GUIDA */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex-1 h-px bg-slate-200" />
+          <span className="text-xs text-slate-400 uppercase tracking-widest whitespace-nowrap">Commissione guida</span>
+          <div className="flex-1 h-px bg-slate-200" />
+        </div>
+
+        {commissioneRecord?.saldata ? (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-6">
+            <p className="text-xs text-indigo-500 uppercase tracking-wide mb-2">T{infoQ.q} {infoQ.anno}</p>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xl font-bold text-indigo-700">{fmtBig(commissioneRecord.fattura_importo)}</span>
+              <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full">✓ fattura inserita</span>
+            </div>
+            <p className="text-xs text-indigo-400">registrata come fattura ricevuta · trimestre chiuso</p>
+          </div>
+        ) : (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-6">
+            <p className="text-xs text-indigo-500 uppercase tracking-wide mb-3">Scenario reale con commissione guida</p>
+
+            <div className="bg-white rounded-xl px-3 py-2.5 flex flex-col gap-1.5 text-xs text-slate-500 mb-3">
+              <div className="flex justify-between">
+                <span>Commissione stimata ({entrateTS.length} gg)</span>
+                <span className="font-medium text-slate-700">−{fmtBig(commissioneStimata)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span>Già pagato</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-slate-400">−€</span>
+                  <input
+                    type="number" inputMode="decimal"
+                    value={accontoInput}
+                    onChange={e => setAccontoInput(e.target.value)}
+                    placeholder="0"
+                    className="w-20 border border-slate-300 rounded-lg px-2 py-0.5 text-right text-xs bg-white"
+                  />
+                  <button
+                    onClick={handleSalvaAcconto}
+                    disabled={savingAcconto}
+                    className="bg-indigo-600 text-white rounded-lg px-2 py-0.5 text-xs font-bold disabled:opacity-40">
+                    {savingAcconto ? '…' : '✓'}
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between border-t border-slate-200 pt-1.5 mt-0.5 font-semibold text-slate-700">
+                <span>Ancora da pagare</span>
+                <span className="text-indigo-700">−{fmtBig(ancoraRa)}</span>
+              </div>
+            </div>
+
+            <div className="flex justify-between items-center mb-3">
+              <p className="text-xs text-slate-500">Beneficio reale stimato</p>
+              <p className={`text-2xl font-bold ${beneficioReale >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {beneficioReale >= 0 ? '+' : ''}{fmtBig(beneficioReale)}
               </p>
             </div>
 
-            {showDettaglioSaldo && (
-              <div className="mt-3 border-t border-slate-200 pt-3 flex flex-col gap-2">
-                <div className="text-xs">
-                  <div className="flex justify-between text-slate-700 mb-1.5">
-                    <span>Entrate nette</span>
-                    <span className="text-green-600 font-medium">+{formatEur(totaleEntrate)}</span>
-                  </div>
-                  {totaleSpese > 0 && (
-                    <div className="flex justify-between text-slate-700 mb-1.5">
-                      <span>Spese variabili</span>
-                      <span className="text-red-500">-{formatEur(totaleSpese)}</span>
-                    </div>
-                  )}
-                  {totaleFattureRicevute > 0 && (
-                    <div className="flex justify-between text-slate-700 mb-1.5">
-                      <span>Fatture ricevute</span>
-                      <span className="text-red-500">-{formatEur(totaleFattureRicevute)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-slate-700 mb-1.5">
-                    <span>Spese fisse</span>
-                    <span className="text-red-500">-{formatEur(totaleFisso)}</span>
-                  </div>
-                </div>
+            <div className="h-2 bg-indigo-100 rounded-full overflow-hidden mb-1.5">
+              <div className={`h-full rounded-full transition-all ${progPctReale >= 100 ? 'bg-green-500' : 'bg-indigo-400'}`}
+                style={{ width: `${progPctReale}%` }} />
+            </div>
+            <div className="flex justify-between text-xs text-slate-400 mb-3">
+              <span>Guadagnato: <strong className="text-slate-600">{fmtBig(totaleEntrate)}</strong></span>
+              <span>Serve: <strong className="text-slate-600">{fmtBig(targetReale)}</strong></span>
+            </div>
 
-                {totaleRateMensili > 0 && (
-                  <div className="border-t border-slate-200 pt-2">
-                    <p className="text-xs font-medium text-slate-600 mb-1.5">Rate debiti mese</p>
-                    <div className="flex flex-col gap-1.5">
-                      {debitiAttivi.filter(d => d.rata_mensile > 0).map(d => (
-                        <div key={d.id} className="flex justify-between text-xs text-slate-700 bg-slate-50 p-2 rounded">
-                          <span className="font-medium">{debitiMap[d.id] || 'Debito'}</span>
-                          <span className="text-red-500 font-medium">{formatEur(d.rata_mensile)}</span>
-                        </div>
-                      ))}
-                      {rateMese.map(rata => (
-                        <div key={rata.id} className={`flex justify-between text-xs p-2 rounded ${rata.pagato ? 'bg-green-50 text-slate-400' : 'bg-slate-50 text-slate-700'}`}>
-                          <div className="flex flex-col flex-1">
-                            <span className="font-medium">{debitiMap[rata.debito_id] || 'Debito'} {rata.pagato && '✓'}</span>
-                            <span className="text-slate-500">{formatDate(rata.data_scadenza)}{rata.numero_rata ? ` · Rata ${rata.numero_rata}` : ''}</span>
-                          </div>
-                          <span className={rata.pagato ? 'text-green-500 font-medium' : 'text-red-500 font-medium'}>{formatEur(rata.importo)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex justify-between text-xs font-medium text-slate-700 mt-1.5 border-t border-slate-200 pt-1.5">
-                      <span>Totale rate</span>
-                      <span className="text-red-500">-{formatEur(totaleRateMensili)}</span>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex justify-between font-bold border-t border-slate-200 pt-1.5 mt-0.5 text-xs">
-                  <span>Saldo reale</span>
-                  <span className={saldoRealeColore}>{formatEur(saldoReale)}</span>
-                </div>
-              </div>
+            {giorniRimasti > 0 && targetGiornalieroReale > 0 && (
+              <p className="text-xs text-slate-500 bg-white rounded-xl px-3 py-2 mb-3">
+                Devi guadagnare <strong className="text-indigo-600">{fmtBig(targetGiornalieroReale)}/giorno</strong> nei prossimi {giorniRimasti} giorni
+              </p>
             )}
-          </div>
 
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <div className="bg-green-50 rounded-xl p-3 border border-green-100">
-              <p className="text-xs text-green-700 font-medium mb-1">Incassi</p>
-              <p className="text-base font-bold text-green-800">{formatEur(totaleNetto)}</p>
-              {totaleFattureEmesse > 0 && <p className="text-xs text-green-600">+ fatt. {formatEur(totaleFattureEmesse)}</p>}
-            </div>
-            <div className="bg-red-50 rounded-xl p-3 border border-red-100">
-              <p className="text-xs text-red-700 font-medium mb-1">Uscite</p>
-              <p className="text-base font-bold text-red-800">{formatEur(totaleSpese)}</p>
-              {totaleFattureRicevute > 0 && <p className="text-xs text-red-600">+ fatt. {formatEur(totaleFattureRicevute)}</p>}
-            </div>
-          </div>
-
-
-          {totaleCommissioni > 0 && (
-            <div className="bg-orange-50 rounded-xl p-3 border border-orange-100 mb-3">
-              <p className="text-xs text-orange-700 font-medium">Commissioni mese da pagare</p>
-              <p className="text-base font-bold text-orange-800">{formatEur(totaleCommissioni)}</p>
-            </div>
-          )}
-
-          <div
-            onClick={() => navigate('/fisse')}
-            className="bg-orange-50 rounded-xl p-3 border border-orange-100 mb-3 flex justify-between items-center cursor-pointer active:opacity-70"
-          >
-            <div>
-              <p className="text-xs text-orange-700 font-medium">Spese fisse mensili</p>
-              <p className="text-xs text-orange-500">{totaleFisso > 0 ? 'affitto, abbonamenti, SS...' : 'Tocca per configurare'}</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <p className="text-base font-bold text-orange-800">{totaleFisso > 0 ? formatEur(totaleFisso) : '+'}</p>
-            </div>
-          </div>
-
-          {datiQ && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-slate-700">Tasse trimestre</h3>
-                <span className="text-xs text-slate-400">{infoQ.label}</span>
-              </div>
-              <div className="flex flex-col gap-2">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="text-sm text-slate-700">IRPF mod. 130</p>
-                    <p className="text-xs text-slate-400">20% su utile YTD {formatEur(profittoYTD)} (cumulativo)</p>
-                    {costiDedFisseYTD > 0 && (
-                      <p className="text-xs text-green-600">spese fisse -{formatEur(costiDedFisseYTD)} incluse</p>
-                    )}
-                    {costiDedDebitiYTD > 0 && (
-                      <p className="text-xs text-green-600">rate deducibili -{formatEur(costiDedDebitiYTD)} incluse</p>
-                    )}
-                  </div>
-                  <span className="font-semibold text-slate-800">{formatEur(irpfQ)}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="text-sm text-slate-700">IGIC mod. 420</p>
-                    <p className="text-xs text-slate-400">incassata {formatEur(igicRepercutido)} · pagata {formatEur(igicSoportadoTotale)}</p>
-                    {igicFisseQ > 0 && (
-                      <p className="text-xs text-green-600">di cui {formatEur(igicFisseQ)} da spese fisse</p>
-                    )}
-                  </div>
-                  <span className="font-semibold text-slate-800">{formatEur(igicQ)}</span>
-                </div>
-                <div className="flex justify-between items-center border-t border-slate-100 pt-2 mt-1">
-                  <span className="text-sm font-bold text-slate-700">Totale stimato</span>
-                  <span className="font-bold text-purple-700">{formatEur(irpfQ + igicQ)}</span>
-                </div>
-              </div>
-              <p className="text-xs text-slate-400 mt-2">Scadenza: {infoQ.deadline}</p>
-            </div>
-          )}
-
-          {perAttivita.length > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
-              <h3 className="text-sm font-semibold text-slate-700 mb-3">Entrate per attività</h3>
-              <div className="flex flex-col gap-2">
-                {perAttivita.map(a => (
-                  <div key={a.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: a.colore }} />
-                      <span className="text-sm text-slate-700">{a.nome}</span>
-                      <span className="text-xs text-slate-400">{a.count} {a.count === 1 ? 'entrata' : 'entrate'}</span>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-sm font-semibold text-green-700">{formatEur(a.netto)}</span>
-                      {a.commissioni > 0 && <span className="text-xs text-orange-500 ml-2">comm. {formatEur(a.commissioni)}</span>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <button onClick={() => navigate('/entrate')} className="bg-blue-600 text-white rounded-xl py-3 font-semibold text-sm">+ Entrata</button>
-            <button onClick={() => navigate('/spese')} className="bg-slate-700 text-white rounded-xl py-3 font-semibold text-sm">+ Spesa</button>
-          </div>
-
-          {entrate.length === 0 && spese.length === 0 && (
-            <p className="text-center text-slate-400 text-sm mt-4 mb-6">Nessun dato per questo mese</p>
-          )}
-
-          <div className="border-t border-slate-200 pt-4 mt-2">
-            <button
-              onClick={handleReset}
-              disabled={resetting}
-              className="w-full py-2.5 rounded-xl text-sm font-medium text-red-500 border border-red-200 hover:bg-red-50 disabled:opacity-40"
-            >
-              {resetting ? 'Eliminazione in corso...' : 'Azzera tutti i dati (per test)'}
+            <button onClick={() => setShowAzzera(true)}
+              className="w-full bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold active:bg-indigo-700">
+              Azzera — inserisci fattura trimestrale
             </button>
           </div>
-        </>
+        )}
+
+        {/* BREAKDOWN */}
+        <div className="bg-slate-50 rounded-2xl p-4 mb-4">
+          <div className="flex justify-between py-2 text-sm border-b border-slate-200">
+            <span className="text-slate-500">Entrate nette</span>
+            <span className="font-medium text-green-600">+{fmtBig(totaleEntrate)}</span>
+          </div>
+          <div className="flex justify-between py-2 text-sm border-b border-slate-200">
+            <span className="text-slate-500">Spese variabili</span>
+            <span className="font-medium text-red-500">−{fmtBig(totaleSpese)}</span>
+          </div>
+          {totaleFattureRicevute > 0 && (
+            <div className="flex justify-between py-2 text-sm border-b border-slate-200">
+              <span className="text-slate-500">Fatture ricevute</span>
+              <span className="font-medium text-red-500">−{fmtBig(totaleFattureRicevute)}</span>
+            </div>
+          )}
+          <div className="flex justify-between py-2 text-sm border-b border-slate-200">
+            <span className="text-slate-500">Spese fisse</span>
+            <span className="font-medium text-red-500">−{fmtBig(totaleFisso)}</span>
+          </div>
+          <div className="flex justify-between py-2 text-sm border-b border-slate-200">
+            <span className="text-slate-500">Rate debiti</span>
+            <span className="font-medium text-red-500">−{fmtBig(totaleRateMensili)}</span>
+          </div>
+          <div className="flex justify-between py-2 text-sm border-b border-slate-200">
+            <span className="text-slate-500">Tasse da parte</span>
+            <span className="font-medium text-amber-500">−{fmtBig(tasseMensili)}</span>
+          </div>
+          <div className="flex justify-between pt-3 text-base font-semibold">
+            <span>Rimane a te</span>
+            <span className={beneficio >= 0 ? 'text-green-500' : 'text-red-500'}>
+              {beneficio >= 0 ? '+' : ''}{fmtBig(beneficio)}
+            </span>
+          </div>
+        </div>
+
+        {/* SALDO REALE */}
+        <div className={`rounded-2xl border p-4 mb-4 cursor-pointer ${saldoRealeBg}`}
+             onClick={() => setShowDettaglioSaldo(s => !s)}>
+          <p className="text-xs font-medium text-slate-500 mb-1">Saldo reale mensile</p>
+          <p className={`text-3xl font-bold ${saldoRealeColore}`}>{formatEur(saldoReale)}</p>
+          <p className="text-xs text-slate-400 mt-1">dopo spese fisse e rate debiti · tap per dettaglio</p>
+
+          {showDettaglioSaldo && (
+            <div className="mt-3 border-t border-slate-200 pt-3 flex flex-col gap-1.5 text-xs">
+              <div className="flex justify-between text-slate-700">
+                <span>Entrate nette</span>
+                <span className="text-green-600 font-medium">+{formatEur(totaleEntrate)}</span>
+              </div>
+              {totaleSpese > 0 && (
+                <div className="flex justify-between text-slate-700">
+                  <span>Spese variabili</span>
+                  <span className="text-red-500">−{formatEur(totaleSpese)}</span>
+                </div>
+              )}
+              {totaleFattureRicevute > 0 && (
+                <div className="flex justify-between text-slate-700">
+                  <span>Fatture ricevute</span>
+                  <span className="text-red-500">−{formatEur(totaleFattureRicevute)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-slate-700">
+                <span>Spese fisse</span>
+                <span className="text-red-500">−{formatEur(totaleFisso)}</span>
+              </div>
+              {totaleRateMensili > 0 && (
+                <div className="flex justify-between text-slate-700">
+                  <span>Rate debiti</span>
+                  <span className="text-red-500">−{formatEur(totaleRateMensili)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold border-t border-slate-200 pt-1.5 mt-0.5">
+                <span>Saldo reale</span>
+                <span className={saldoRealeColore}>{formatEur(saldoReale)}</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* CARDS SECONDARIE */}
+        <div className="grid grid-cols-2 gap-3 mb-4">
+          <button onClick={() => navigate('/budget')} className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-left active:opacity-70">
+            <p className="text-xs text-amber-600 mb-1">Tasse stimate trimestre</p>
+            <p className="text-xl font-bold text-amber-600">{fmtBig(irpfQ + igicQ)}</p>
+            <p className="text-xs text-amber-400 mt-1">scad. {infoQ.deadline}</p>
+          </button>
+          <button onClick={() => navigate('/debiti')} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left active:opacity-70">
+            <p className="text-xs text-slate-500 mb-1">Debito residuo</p>
+            <p className="text-xl font-bold text-slate-700">{fmtBig(totaleResiduo)}</p>
+            <p className="text-xs text-slate-400 mt-1">totale da pagare</p>
+          </button>
+        </div>
+
+        {/* PROSSIME USCITE STRAORDINARIE */}
+        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-6">
+          <p className="text-xs text-orange-500 uppercase tracking-wide mb-2">Prossime uscite straordinarie</p>
+          <div className="flex justify-between items-center mb-1">
+            <p className="text-sm text-orange-700">Giugno — debiti fiscali</p>
+            <p className="text-base font-bold text-orange-600">€466</p>
+          </div>
+          <div className="flex justify-between items-center">
+            <p className="text-sm text-orange-700">20 luglio — Mod 130 + 420</p>
+            <p className="text-base font-bold text-orange-600">{fmtBig(irpfQ + igicQ)}</p>
+          </div>
+          <p className="text-xs text-orange-400 mt-2">I €466 di giugno non sono nelle rate mensili — mettili da parte</p>
+        </div>
+
+        {/* BOTTONI */}
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => navigate('/entrate')}
+            className="bg-green-500 text-white rounded-2xl py-4 font-bold text-base active:bg-green-600">
+            + Entrata
+          </button>
+          <button onClick={() => navigate('/spese')}
+            className="bg-slate-800 text-white rounded-2xl py-4 font-bold text-base active:bg-slate-700">
+            + Spesa
+          </button>
+        </div>
+
+      </div>
+
+      {/* MODAL AZZERA COMMISSIONE */}
+      {showAzzera && (
+        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50"
+          onClick={() => setShowAzzera(false)}>
+          <div className="bg-white rounded-t-2xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
+            <p className="text-base font-bold text-slate-800 mb-1">Fattura commissione guida</p>
+            <p className="text-sm text-slate-500 mb-1">T{infoQ.q} {infoQ.anno} · Tenerife Stars</p>
+            <p className="text-xs text-slate-400 mb-4">Stima: {fmtBig(commissioneStimata)} — inserisci il reale (totale con IGIC 7%)</p>
+            <input
+              type="number" inputMode="decimal" placeholder="es. 450"
+              value={azzeraInput} onChange={e => setAzzeraInput(e.target.value)}
+              className="w-full border border-slate-300 rounded-xl px-4 py-3 text-lg mb-4" autoFocus />
+            <div className="flex gap-3">
+              <button onClick={() => { setShowAzzera(false); setAzzeraInput('') }}
+                className="flex-1 border border-slate-300 rounded-xl py-3 text-sm font-medium text-slate-600">
+                Annulla
+              </button>
+              <button onClick={handleAzzera} disabled={savingAzzera || !azzeraInput}
+                className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-40">
+                {savingAzzera ? 'Salvo...' : 'Inserisci e azzera'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

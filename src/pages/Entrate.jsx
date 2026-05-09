@@ -22,6 +22,28 @@ const EMPTY_FORM = {
   dichiara: true,
 }
 
+const MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+
+function meseCorrente() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function labelMese(ym) {
+  const [y, m] = ym.split('-')
+  return `${MESI[parseInt(m) - 1]} ${y}`
+}
+
+function prevMese(ym) {
+  const [y, m] = ym.split('-').map(Number)
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
+}
+
+function nextMese(ym) {
+  const [y, m] = ym.split('-').map(Number)
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+}
+
 const EMPTY_NUOVA = { nome: '', epigrafe: 'actividades' }
 
 const DEFAULT_ATTIVITA = [
@@ -42,13 +64,19 @@ export default function Entrate() {
   const [nuova, setNuova] = useState(EMPTY_NUOVA)
   const [showNuova, setShowNuova] = useState(false)
   const [savingNuova, setSavingNuova] = useState(false)
+  const [filtroMese, setFiltroMese] = useState(meseCorrente())
   const [filtroAttivita, setFiltroAttivita] = useState('tutte')
   const [editandoId, setEditandoId] = useState(null)
   const [editForm, setEditForm] = useState(EMPTY_FORM)
   const [savingEdit, setSavingEdit] = useState(false)
+  const [versamenti, setVersamenti] = useState([])
+  const [showVersamenti, setShowVersamenti] = useState(false)
+  const [versForm, setVersForm] = useState({ data: new Date().toISOString().slice(0, 10), importo: '', igic_percentuale: '7', note: '' })
+  const [savingVers, setSavingVers] = useState(false)
 
-  const lordo = (parseFloat(form.importo_cash) || 0) + (parseFloat(form.importo_card) || 0)
-  const lordoDichiarato = (parseFloat(form.cash_dichiarato) || 0) + (parseFloat(form.importo_card) || 0)
+  function p(v) { return parseFloat(String(v || '').replace(',', '.')) || 0 }
+  const lordo = p(form.importo_cash) + p(form.importo_card)
+  const lordoDichiarato = p(form.cash_dichiarato) + p(form.importo_card)
   const igicPerc = parseFloat(form.igic_percentuale) || 0
   const imponibile = igicPerc > 0 ? lordoDichiarato / (1 + igicPerc / 100) : lordoDichiarato
   const igicImporto = lordoDichiarato - imponibile
@@ -60,6 +88,7 @@ export default function Entrate() {
       }
     })
     loadEntrate()
+    loadVersamenti()
   }, [])
 
   async function initializeDefaultAttivita() {
@@ -98,6 +127,47 @@ export default function Entrate() {
     }
   }
 
+  async function loadVersamenti() {
+    try {
+      const { data, error } = await supabase.from('versamenti').select('*').order('data', { ascending: false })
+      if (error) throw error
+      setVersamenti(data || [])
+    } catch (err) {
+      console.error('Errore versamenti:', err.message)
+    }
+  }
+
+  async function handleSaveVersamento(e) {
+    e.preventDefault()
+    if (!versForm.importo) return
+    setSavingVers(true)
+    try {
+      const { error } = await supabase.from('versamenti').insert({
+        data: versForm.data,
+        importo: parseFloat(String(versForm.importo).replace(',', '.')),
+        igic_percentuale: parseFloat(versForm.igic_percentuale) || 0,
+        note: versForm.note,
+      })
+      if (error) throw error
+      setVersForm({ data: new Date().toISOString().slice(0, 10), importo: '', igic_percentuale: '7', note: '' })
+      loadVersamenti()
+    } catch (err) {
+      alert('Errore: ' + err.message)
+    } finally {
+      setSavingVers(false)
+    }
+  }
+
+  async function handleDeleteVersamento(id) {
+    try {
+      const { error } = await supabase.from('versamenti').delete().eq('id', id)
+      if (error) throw error
+      loadVersamenti()
+    } catch (err) {
+      alert('Errore: ' + err.message)
+    }
+  }
+
   async function handleSave(e) {
     e.preventDefault()
     if (!form.attivita_id || lordo === 0) {
@@ -112,10 +182,10 @@ export default function Entrate() {
         attivita_id: form.attivita_id,
         attivita_nome: att?.nome || '',
         attivita_colore: att?.colore || '',
-        importo_cash: parseFloat(form.importo_cash) || 0,
-        importo_card: parseFloat(form.importo_card) || 0,
+        importo_cash: p(form.importo_cash),
+        importo_card: p(form.importo_card),
         importo_lordo: lordo,
-        cash_dichiarato: parseFloat(form.cash_dichiarato) || 0,
+        cash_dichiarato: p(form.cash_dichiarato),
         importo_netto: imponibile,
         igic_percentuale: igicPerc,
         note: form.note,
@@ -154,9 +224,10 @@ export default function Entrate() {
   }
 
   async function handleSaveEdit(id) {
-    const cash = parseFloat(editForm.importo_cash) || 0
-    const cashDich = parseFloat(editForm.cash_dichiarato) || 0
-    const card = parseFloat(editForm.importo_card) || 0
+    function pe(v) { return parseFloat(String(v || '').replace(',', '.')) || 0 }
+    const cash = pe(editForm.importo_cash)
+    const cashDich = pe(editForm.cash_dichiarato)
+    const card = pe(editForm.importo_card)
     const totale = cash + card
     const igicP = parseFloat(editForm.igic_percentuale) || 0
     const lordoDich = cashDich + card
@@ -243,13 +314,15 @@ export default function Entrate() {
     }
   }
 
+  const entrateMese = entrate.filter(e => e.data && e.data.startsWith(filtroMese))
   const entrateFiltrate = filtroAttivita === 'tutte'
-    ? entrate
-    : entrate.filter(e => e.attivita_id === filtroAttivita)
+    ? entrateMese
+    : entrateMese.filter(e => e.attivita_id === filtroAttivita)
 
   const totaleCash = entrateFiltrate.reduce((s, e) => s + (e.importo_cash || 0), 0)
   const totaleCard = entrateFiltrate.reduce((s, e) => s + (e.importo_card || 0), 0)
   const totale = totaleCash + totaleCard
+  const totaleComplessivo = entrate.reduce((s, e) => s + (e.importo_cash || 0) + (e.importo_card || 0), 0)
 
   return (
     <div className="p-4 max-w-lg mx-auto">
@@ -306,6 +379,93 @@ export default function Entrate() {
         </div>
       )}
 
+      <div className="bg-green-600 rounded-2xl p-4 mb-3 flex items-center justify-between">
+        <p className="text-sm font-medium text-green-100">Totale complessivo dal 01/04/2026</p>
+        <p className="text-2xl font-bold text-white">{formatEur(totaleComplessivo)}</p>
+      </div>
+
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl mb-3 overflow-hidden">
+        <button onClick={() => setShowVersamenti(s => !s)} className="w-full flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="text-base">🏦</span>
+            <span className="text-sm font-semibold text-amber-800">Versamenti cash in banca</span>
+            {versamenti.length > 0 && <span className="text-xs bg-amber-200 text-amber-800 rounded-full px-2 py-0.5">{versamenti.length}</span>}
+          </div>
+          <span className="text-amber-600 text-sm">{showVersamenti ? '▲' : '▼'}</span>
+        </button>
+
+        {showVersamenti && (
+          <div className="px-4 pb-4 flex flex-col gap-3">
+            <form onSubmit={handleSaveVersamento} className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-xs font-medium text-slate-600 mb-1 block">Data</label>
+                  <input type="date" value={versForm.data} onChange={e => setVersForm(f => ({ ...f, data: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 mb-1 block">Importo lordo €</label>
+                  <input type="text" inputMode="decimal" placeholder="0,00" value={versForm.importo} onChange={e => setVersForm(f => ({ ...f, importo: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600 mb-1 block">IGIC inclusa</label>
+                <div className="flex gap-2">
+                  {[{ val: '7', label: '7% (standard)' }, { val: '0', label: '0% (esente)' }].map(opt => (
+                    <button key={opt.val} type="button" onClick={() => setVersForm(f => ({ ...f, igic_percentuale: opt.val }))}
+                      className={`flex-1 py-2 rounded-lg text-sm border font-medium ${versForm.igic_percentuale === opt.val ? 'bg-amber-100 border-amber-400 text-amber-800' : 'bg-white border-slate-300 text-slate-600'}`}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {versForm.importo && parseFloat(String(versForm.importo).replace(',','.')) > 0 && (() => {
+                const imp = parseFloat(String(versForm.importo).replace(',','.'))
+                const perc = parseFloat(versForm.igic_percentuale) || 0
+                const imponibile = perc > 0 ? imp / (1 + perc/100) : imp
+                const igic = imp - imponibile
+                return (
+                  <div className="bg-white rounded-lg p-2.5 text-xs flex flex-col gap-1 border border-amber-100">
+                    {perc > 0 && <div className="flex justify-between text-slate-500"><span>IGIC {perc}%</span><span>−{formatEur(igic)}</span></div>}
+                    <div className="flex justify-between font-semibold text-amber-800"><span>Imponibile (Mod 130)</span><span>{formatEur(imponibile)}</span></div>
+                  </div>
+                )
+              })()}
+              <input type="text" placeholder="Note (opzionale)" value={versForm.note} onChange={e => setVersForm(f => ({ ...f, note: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <button type="submit" disabled={savingVers || !versForm.importo} className="bg-amber-500 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-40">
+                {savingVers ? 'Salvo...' : '+ Versa in banca'}
+              </button>
+            </form>
+
+            {versamenti.length > 0 && (
+              <div className="flex flex-col gap-1.5 border-t border-amber-200 pt-3">
+                {versamenti.map(v => (
+                  <div key={v.id} className="flex items-center justify-between bg-white rounded-lg px-3 py-2 border border-amber-100">
+                    <div>
+                      <p className="text-xs font-medium text-slate-700">{formatData(v.data)}</p>
+                      {v.note && <p className="text-xs text-slate-400">{v.note}</p>}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-amber-700">{formatEur(v.importo)}</span>
+                      <button onClick={() => handleDeleteVersamento(v.id)} className="text-xs text-red-400 hover:text-red-600">Elimina</button>
+                    </div>
+                  </div>
+                ))}
+                <div className="flex justify-between text-xs font-semibold text-amber-800 pt-1">
+                  <span>Totale versato</span>
+                  <span>{formatEur(versamenti.reduce((s, v) => s + v.importo, 0))}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-2.5 mb-3 border border-slate-200">
+        <button onClick={() => setFiltroMese(prevMese(filtroMese))} className="text-slate-500 hover:text-slate-800 px-1 py-1 text-lg leading-none">‹</button>
+        <span className="text-sm font-semibold text-slate-700">{labelMese(filtroMese)}</span>
+        <button onClick={() => setFiltroMese(nextMese(filtroMese))} className="text-slate-500 hover:text-slate-800 px-1 py-1 text-lg leading-none">›</button>
+      </div>
+
       {attivita.length > 0 && (
         <div className="flex gap-2 overflow-x-auto pb-1 mb-4">
           <button onClick={() => setFiltroAttivita('tutte')} className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border ${filtroAttivita === 'tutte' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300'}`}>Tutte</button>
@@ -327,7 +487,7 @@ export default function Entrate() {
 
       <div className="grid grid-cols-3 gap-3 mb-5">
         <div className="bg-green-50 rounded-xl p-3 border border-green-100 col-span-1">
-          <p className="text-xs text-green-700 font-medium">Totale</p>
+          <p className="text-xs text-green-700 font-medium">{labelMese(filtroMese)}</p>
           <p className="text-lg font-bold text-green-800">{formatEur(totale)}</p>
         </div>
         <div className="bg-slate-50 rounded-xl p-3 border border-slate-200">
@@ -356,16 +516,16 @@ export default function Entrate() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">Cash totale €</label>
-              <input type="number" min="0" step="0.01" placeholder="0,00" value={form.importo_cash} onChange={e => setForm(f => ({ ...f, importo_cash: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <input type="text" inputMode="decimal" placeholder="0,00" value={form.importo_cash} onChange={e => setForm(f => ({ ...f, importo_cash: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
               <label className="text-xs font-medium text-slate-600 mb-1 block">Card €</label>
-              <input type="number" min="0" step="0.01" placeholder="0,00" value={form.importo_card} onChange={e => setForm(f => ({ ...f, importo_card: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <input type="text" inputMode="decimal" placeholder="0,00" value={form.importo_card} onChange={e => setForm(f => ({ ...f, importo_card: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
             </div>
           </div>
           <div>
             <label className="text-xs font-medium text-slate-600 mb-1 block">Cash dichiarato € <span className="text-slate-400 font-normal">(quello che versi in banca)</span></label>
-            <input type="number" min="0" step="0.01" placeholder="0,00" value={form.cash_dichiarato} onChange={e => setForm(f => ({ ...f, cash_dichiarato: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            <input type="text" inputMode="decimal" placeholder="0,00" value={form.cash_dichiarato} onChange={e => setForm(f => ({ ...f, cash_dichiarato: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="text-xs font-medium text-slate-600 mb-1 block">IGIC inclusa</label>
@@ -440,16 +600,16 @@ export default function Entrate() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-medium text-slate-600 mb-1 block">Cash totale €</label>
-                      <input type="number" min="0" step="0.01" value={editForm.importo_cash} onChange={ev => setEditForm(f => ({ ...f, importo_cash: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                      <input type="text" inputMode="decimal" value={editForm.importo_cash} onChange={ev => setEditForm(f => ({ ...f, importo_cash: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                     <div>
                       <label className="text-xs font-medium text-slate-600 mb-1 block">Card €</label>
-                      <input type="number" min="0" step="0.01" value={editForm.importo_card} onChange={ev => setEditForm(f => ({ ...f, importo_card: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                      <input type="text" inputMode="decimal" value={editForm.importo_card} onChange={ev => setEditForm(f => ({ ...f, importo_card: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                     </div>
                   </div>
                   <div>
                     <label className="text-xs font-medium text-slate-600 mb-1 block">Cash dichiarato € <span className="text-slate-400 font-normal">(quello che versi in banca)</span></label>
-                    <input type="number" min="0" step="0.01" value={editForm.cash_dichiarato} onChange={ev => setEditForm(f => ({ ...f, cash_dichiarato: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    <input type="text" inputMode="decimal" value={editForm.cash_dichiarato} onChange={ev => setEditForm(f => ({ ...f, cash_dichiarato: ev.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
                   </div>
                   <div>
                     <label className="text-xs font-medium text-slate-600 mb-1 block">Note</label>

@@ -56,7 +56,7 @@ export default function SpeseFisse() {
     try {
       const data = {
         nome: form.nome.trim(),
-        importo: parseFloat(form.importo),
+        importo: parseFloat(String(form.importo).replace(',', '.')),
         giorno_addebito: form.giorno_addebito ? parseInt(form.giorno_addebito) : null,
         deducibile: form.deducibile,
         igic_percentuale: form.deducibile ? (parseFloat(form.igic_percentuale) || 0) : 0,
@@ -171,6 +171,8 @@ export default function SpeseFisse() {
                 value={form.importo}
                 onChange={e => setForm(f => ({ ...f, importo: e.target.value }))}
                 className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                type="text"
+                inputMode="decimal"
               />
             </div>
             <div className="w-24">

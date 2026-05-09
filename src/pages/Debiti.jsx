@@ -85,14 +85,15 @@ export default function Debiti() {
 
   async function handleSave(e) {
     e.preventDefault()
-    if (!form.nome || !form.importo_totale || !form.rata_mensile) return
+    const isVarPlan = form.ha_piano && form.tipo_piano === 'variabili'
+    if (!form.nome || !form.importo_totale || (!isVarPlan && !form.rata_mensile)) return
     setSaving(true)
     try {
       const { data: newDebito, error } = await supabase.from('debiti').insert({
         nome: form.nome.trim(),
         importo_totale: parseFloat(form.importo_totale || 0),
         importo_pagato: parseFloat(form.importo_pagato || 0),
-        rata_mensile: parseFloat(form.rata_mensile),
+        rata_mensile: isVarPlan ? 0 : parseFloat(form.rata_mensile),
         giorno_addebito: form.giorno_addebito ? parseInt(form.giorno_addebito) : null,
         data_prima_rata: form.data_prima_rata || null,
         data_fine: form.data_fine || null,
@@ -253,9 +254,15 @@ export default function Debiti() {
   }
 
   const totaleResiduo = debiti.reduce((s, d) => s + Math.max(0, d.importo_totale - (d.importo_pagato || 0)), 0)
+  const meseCorrStr = (() => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}` })()
   const totaleRateMensili = debiti.reduce((s, d) => {
     const residuo = d.importo_totale - (d.importo_pagato || 0)
-    return residuo > 0 ? s + d.rata_mensile : s
+    if (residuo <= 0) return s
+    const debitoRate = rate[d.id] || []
+    if (debitoRate.length > 0) {
+      return s + debitoRate.filter(r => r.data_scadenza?.startsWith(meseCorrStr)).reduce((ss, r) => ss + r.importo, 0)
+    }
+    return s + d.rata_mensile
   }, 0)
 
   const nRatePreview = form.importo_totale && form.rata_mensile
@@ -278,6 +285,7 @@ export default function Debiti() {
           <input type="number" min="0" step="0.01" value={f.importo_pagato} onChange={e => setF(p => ({ ...p, importo_pagato: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
+      {!(f.ha_piano && f.tipo_piano === 'variabili') && (
       <div className="flex gap-3">
         <div className="flex-1">
           <label className="text-xs font-medium text-slate-600 mb-1 block">Rata mensile €</label>
@@ -288,6 +296,7 @@ export default function Debiti() {
           <input type="number" min="1" max="31" value={f.giorno_addebito} onChange={e => setF(p => ({ ...p, giorno_addebito: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
         </div>
       </div>
+      )}
       <div>
         <label className="text-xs font-medium text-slate-600 mb-1 block">Data prima rata (gg/mm/aaaa)</label>
         <input type="date" value={f.data_prima_rata} onChange={e => setF(p => ({ ...p, data_prima_rata: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
@@ -432,7 +441,7 @@ export default function Debiti() {
             )}
           </div>
 
-          <button type="submit" disabled={saving || !form.nome || !form.importo_totale || !form.rata_mensile}
+          <button type="submit" disabled={saving || !form.nome || !form.importo_totale || (!(form.ha_piano && form.tipo_piano === 'variabili') && !form.rata_mensile)}
             className="bg-red-600 text-white rounded-xl py-3 font-semibold disabled:opacity-40">
             {saving ? 'Salvo...' : 'Aggiungi debito'}
           </button>

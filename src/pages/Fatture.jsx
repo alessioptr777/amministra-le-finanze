@@ -137,7 +137,7 @@ export default function Fatture() {
         numero_fattura: formE.numero_fattura,
         data: formE.data,
         cliente_nome: formE.cliente_nome,
-        totale: parseFloat(formE.totale),
+        totale: parseFloat(String(formE.totale).replace(',', '.')),
         igic_percentuale: parseFloat(formE.igic_percentuale || 7),
         note: formE.note,
         doc_url,
@@ -164,7 +164,7 @@ export default function Fatture() {
         numero_fattura_fornitore: formR.numero_fattura_fornitore,
         data: formR.data,
         fornitore_nome: formR.fornitore_nome,
-        totale: parseFloat(formR.totale),
+        totale: parseFloat(String(formR.totale).replace(',', '.')),
         igic_percentuale: parseFloat(formR.igic_percentuale || 7),
         note: formR.note,
         doc_url,
@@ -319,7 +319,7 @@ export default function Fatture() {
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="text-xs font-medium text-slate-600 mb-1 block">Totale €</label>
-              <input type="number" min="0" step="0.01" placeholder="0,00" value={formE.totale} onChange={e => setFormE(f => ({ ...f, totale: e.target.value }))} required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <input type="text" inputMode="decimal" placeholder="0,00" value={formE.totale} onChange={e => setFormE(f => ({ ...f, totale: e.target.value }))} required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <div className="w-24">
               <label className="text-xs font-medium text-slate-600 mb-1 block">IGIC %</label>
@@ -388,7 +388,7 @@ export default function Fatture() {
           <div className="flex gap-3">
             <div className="flex-1">
               <label className="text-xs font-medium text-slate-600 mb-1 block">Totale €</label>
-              <input type="number" min="0" step="0.01" placeholder="0,00" value={formR.totale} onChange={e => setFormR(f => ({ ...f, totale: e.target.value }))} required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+              <input type="text" inputMode="decimal" placeholder="0,00" value={formR.totale} onChange={e => setFormR(f => ({ ...f, totale: e.target.value }))} required className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
             </div>
             <div className="w-24">
               <label className="text-xs font-medium text-slate-600 mb-1 block">IGIC %</label>

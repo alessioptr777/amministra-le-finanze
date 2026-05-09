@@ -29,7 +29,11 @@ export const PIANO_AGENZIA_TRIBUTARIA = [
 export function groupRateByMonth(rate) {
   const grouped = {}
   rate.forEach(r => {
-    const [year, month] = r.data_scadenza.split('-')
+    const parts = r.data_scadenza.split('-')
+    let yearNum = parseInt(parts[0])
+    if (yearNum < 1000) yearNum += 2000
+    const year = String(yearNum)
+    const month = parts[1]
     const key = `${year}-${month}`
     const months = ['GENNAIO','FEBBRAIO','MARZO','APRILE','MAGGIO','GIUGNO','LUGLIO','AGOSTO','SETTEMBRE','OTTOBRE','NOVEMBRE','DICEMBRE']
     const displayKey = `${months[parseInt(month) - 1]} ${year}`

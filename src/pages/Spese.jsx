@@ -11,6 +11,28 @@ function formatData(d) {
   return `${g}-${m}-${y}`
 }
 
+const MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre']
+
+function meseCorrente() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+}
+
+function labelMese(ym) {
+  const [y, m] = ym.split('-')
+  return `${MESI[parseInt(m) - 1]} ${y}`
+}
+
+function prevMese(ym) {
+  const [y, m] = ym.split('-').map(Number)
+  return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`
+}
+
+function nextMese(ym) {
+  const [y, m] = ym.split('-').map(Number)
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+}
+
 const EMPTY_FORM = {
   data: new Date().toISOString().slice(0, 10),
   categoria_id: '',
@@ -29,10 +51,14 @@ export default function Spese() {
   const [saving, setSaving] = useState(false)
   const [fotoFile, setFotoFile] = useState(null)
   const [fotoPreview, setFotoPreview] = useState(null)
+  const [filtroMese, setFiltroMese] = useState(meseCorrente())
   const [filtroCat, setFiltroCat] = useState('tutte')
   const [showNuovaCat, setShowNuovaCat] = useState(false)
   const [nuovaCat, setNuovaCat] = useState({ nome: '', emoji: '' })
   const [savingCat, setSavingCat] = useState(false)
+  const [editandoId, setEditandoId] = useState(null)
+  const [editForm, setEditForm] = useState(EMPTY_FORM)
+  const [savingEdit, setSavingEdit] = useState(false)
   const fileRef = useRef()
 
   useEffect(() => { loadCategorie(); loadSpese() }, [])
@@ -116,7 +142,7 @@ export default function Spese() {
         categoria_id: form.categoria_id,
         categoria_nome: cat?.nome || '',
         categoria_emoji: cat?.emoji || 'box',
-        importo: parseFloat(form.importo),
+        importo: parseFloat(String(form.importo).replace(',', '.')),
         metodo_pagamento: form.metodo_pagamento,
         descrizione: form.descrizione,
         foto_url,
@@ -135,6 +161,45 @@ export default function Spese() {
     }
   }
 
+  function startEdit(s) {
+    setEditandoId(s.id)
+    setEditForm({
+      data: s.data || new Date().toISOString().slice(0, 10),
+      categoria_id: s.categoria_id || '',
+      importo: String(s.importo || ''),
+      metodo_pagamento: s.metodo_pagamento || 'card',
+      descrizione: s.descrizione || '',
+      deducibile: s.deducibile || false,
+      igic_percentuale: String(s.igic_percentuale ?? '0'),
+    })
+  }
+
+  async function handleSaveEdit(id) {
+    if (!editForm.categoria_id || !editForm.importo) return
+    setSavingEdit(true)
+    try {
+      const cat = categorie.find(c => c.id === editForm.categoria_id)
+      const { error } = await supabase.from('spese').update({
+        data: editForm.data,
+        categoria_id: editForm.categoria_id,
+        categoria_nome: cat?.nome || '',
+        categoria_emoji: cat?.emoji || 'box',
+        importo: parseFloat(String(editForm.importo).replace(',', '.')),
+        metodo_pagamento: editForm.metodo_pagamento,
+        descrizione: editForm.descrizione,
+        deducibile: editForm.deducibile,
+        igic_percentuale: editForm.deducibile ? (parseFloat(editForm.igic_percentuale) || 0) : 0,
+      }).eq('id', id)
+      if (error) throw error
+      setEditandoId(null)
+      loadSpese()
+    } catch (err) {
+      alert('Errore: ' + err.message)
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
   async function handleDelete(id) {
     try {
       const { error } = await supabase.from('spese').delete().eq('id', id)
@@ -145,7 +210,9 @@ export default function Spese() {
     }
   }
 
-  const speseFiltrate = filtroCat === 'tutte' ? spese : spese.filter(s => s.categoria_id === filtroCat)
+  const totaleComplessivo = spese.reduce((s, e) => s + (e.importo || 0), 0)
+  const speseMese = spese.filter(s => s.data && s.data.startsWith(filtroMese))
+  const speseFiltrate = filtroCat === 'tutte' ? speseMese : speseMese.filter(s => s.categoria_id === filtroCat)
   const totale = speseFiltrate.reduce((s, e) => s + (e.importo || 0), 0)
 
   return (
@@ -214,7 +281,7 @@ export default function Spese() {
 
           <div>
             <label className="text-xs font-medium text-slate-600 mb-1 block">Importo €</label>
-            <input type="number" min="0" step="0.01" placeholder="0,00" value={form.importo} onChange={e => setForm(f => ({ ...f, importo: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            <input type="text" inputMode="decimal" placeholder="0,00" value={form.importo} onChange={e => setForm(f => ({ ...f, importo: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
           </div>
 
           <div>
@@ -222,7 +289,7 @@ export default function Spese() {
             <div className="flex gap-2">
               {[{ val: 'card', label: '💳 Card / Banca' }, { val: 'cash', label: '💵 Contanti' }].map(opt => (
                 <button key={opt.val} type="button"
-                  onClick={() => setForm(f => ({ ...f, metodo_pagamento: opt.val }))}
+                  onClick={(e) => { e.preventDefault(); setForm(f => ({ ...f, metodo_pagamento: opt.val })) }}
                   className={`flex-1 py-2 rounded-lg text-sm border font-medium ${form.metodo_pagamento === opt.val ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-300 text-slate-600'}`}>
                   {opt.label}
                 </button>
@@ -240,7 +307,7 @@ export default function Spese() {
               <p className="text-sm font-medium text-slate-700">Deducibile</p>
               <p className="text-xs text-slate-400">entra nel Mod 130 come costo</p>
             </div>
-            <button type="button" onClick={() => setForm(f => ({ ...f, deducibile: !f.deducibile }))}
+            <button type="button" onClick={(e) => { e.preventDefault(); setForm(f => ({ ...f, deducibile: !f.deducibile })) }}
               className={`w-12 h-6 rounded-full transition-colors ${form.deducibile ? 'bg-green-500' : 'bg-slate-300'}`}>
               <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${form.deducibile ? 'translate-x-6' : 'translate-x-0'}`} />
             </button>
@@ -252,7 +319,7 @@ export default function Spese() {
               <div className="flex gap-2">
                 {[{ val: '0', label: '0% (esente)' }, { val: '7', label: '7% (standard)' }].map(opt => (
                   <button key={opt.val} type="button"
-                    onClick={() => setForm(f => ({ ...f, igic_percentuale: opt.val }))}
+                    onClick={(e) => { e.preventDefault(); setForm(f => ({ ...f, igic_percentuale: opt.val })) }}
                     className={`flex-1 py-2 rounded-lg text-sm border font-medium ${form.igic_percentuale === opt.val ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-300 text-slate-600'}`}>
                     {opt.label}
                   </button>
@@ -282,15 +349,19 @@ export default function Spese() {
         </form>
       )}
 
-      <div className="bg-red-50 rounded-xl p-3 border border-red-100 mb-4">
-        <p className="text-xs text-red-700 font-medium">
-          Totale spese {filtroCat !== 'tutte' && categorie.find(c => c.id === filtroCat) ? `· ${categorie.find(c => c.id === filtroCat).emoji} ${categorie.find(c => c.id === filtroCat).nome}` : ''}
-        </p>
-        <p className="text-xl font-bold text-red-800">{formatEur(totale)}</p>
+      <div className="bg-red-600 rounded-2xl p-4 mb-3 flex items-center justify-between">
+        <p className="text-sm font-medium text-red-100">Totale complessivo dal 01/04/2026</p>
+        <p className="text-2xl font-bold text-white">{formatEur(totaleComplessivo)}</p>
+      </div>
+
+      <div className="flex items-center justify-between bg-slate-50 rounded-xl px-4 py-2.5 mb-3 border border-slate-200">
+        <button onClick={() => setFiltroMese(prevMese(filtroMese))} className="text-slate-500 hover:text-slate-800 px-1 py-1 text-lg leading-none">‹</button>
+        <span className="text-sm font-semibold text-slate-700">{labelMese(filtroMese)}</span>
+        <button onClick={() => setFiltroMese(nextMese(filtroMese))} className="text-slate-500 hover:text-slate-800 px-1 py-1 text-lg leading-none">›</button>
       </div>
 
       {categorie.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto pb-1 mb-4">
+        <div className="flex gap-2 overflow-x-auto pb-1 mb-3">
           <button onClick={() => setFiltroCat('tutte')} className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border ${filtroCat === 'tutte' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300'}`}>Tutte</button>
           {categorie.map(c => (
             <button key={c.id} onClick={() => setFiltroCat(c.id)} className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium border ${filtroCat === c.id ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-300'}`}>
@@ -300,29 +371,112 @@ export default function Spese() {
         </div>
       )}
 
+      <div className="bg-red-50 rounded-xl p-3 border border-red-100 mb-4">
+        <p className="text-xs text-red-700 font-medium">
+          {labelMese(filtroMese)}{filtroCat !== 'tutte' && categorie.find(c => c.id === filtroCat) ? ` · ${categorie.find(c => c.id === filtroCat).emoji} ${categorie.find(c => c.id === filtroCat).nome}` : ''}
+        </p>
+        <p className="text-xl font-bold text-red-800">{formatEur(totale)}</p>
+      </div>
+
       <div className="flex flex-col gap-2">
         {speseFiltrate.length === 0 && <p className="text-center text-slate-400 py-10">Nessuna spesa ancora</p>}
-        {speseFiltrate.map(s => (
-          <div key={s.id} className="bg-white rounded-xl border border-slate-200 p-3">
-            <div className="flex justify-between items-start">
-              <div className="flex items-center gap-2">
-                <span className="text-xl">{s.categoria_emoji || 'box'}</span>
-                <div>
-                  <p className="font-medium text-slate-800 text-sm">{s.categoria_nome}</p>
-                  <p className="text-xs text-slate-400">{formatData(s.data)}</p>
-                  {s.descrizione && <p className="text-xs text-slate-500">{s.descrizione}</p>}
+        {speseFiltrate.map(s => {
+          const staModificando = editandoId === s.id
+          return (
+            <div key={s.id} className="bg-white rounded-xl border border-slate-200 p-3">
+              {staModificando ? (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Data</label>
+                    <input type="date" value={editForm.data} onChange={e => setEditForm(f => ({ ...f, data: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-2 block">Categoria</label>
+                    <div className="flex flex-wrap gap-2">
+                      {categorie.map(c => (
+                        <button key={c.id} type="button" onClick={() => setEditForm(f => ({ ...f, categoria_id: c.id }))}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm border ${editForm.categoria_id === c.id ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-700 border-slate-300'}`}>
+                          <span>{c.emoji}</span><span>{c.nome}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Importo €</label>
+                    <input type="text" inputMode="decimal" value={editForm.importo} onChange={e => setEditForm(f => ({ ...f, importo: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Pagato con</label>
+                    <div className="flex gap-2">
+                      {[{ val: 'card', label: '💳 Card / Banca' }, { val: 'cash', label: '💵 Contanti' }].map(opt => (
+                        <button key={opt.val} type="button" onClick={() => setEditForm(f => ({ ...f, metodo_pagamento: opt.val }))}
+                          className={`flex-1 py-2 rounded-lg text-sm border font-medium ${editForm.metodo_pagamento === opt.val ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-300 text-slate-600'}`}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 mb-1 block">Descrizione</label>
+                    <input type="text" value={editForm.descrizione} onChange={e => setEditForm(f => ({ ...f, descrizione: e.target.value }))} className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                  <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2.5">
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">Deducibile</p>
+                      <p className="text-xs text-slate-400">entra nel Mod 130 come costo</p>
+                    </div>
+                    <button type="button" onClick={() => setEditForm(f => ({ ...f, deducibile: !f.deducibile }))}
+                      className={`w-12 h-6 rounded-full transition-colors ${editForm.deducibile ? 'bg-green-500' : 'bg-slate-300'}`}>
+                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${editForm.deducibile ? 'translate-x-6' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+                  {editForm.deducibile && (
+                    <div>
+                      <label className="text-xs font-medium text-slate-600 mb-1 block">IGIC inclusa</label>
+                      <div className="flex gap-2">
+                        {[{ val: '0', label: '0% (esente)' }, { val: '7', label: '7% (standard)' }].map(opt => (
+                          <button key={opt.val} type="button" onClick={() => setEditForm(f => ({ ...f, igic_percentuale: opt.val }))}
+                            className={`flex-1 py-2 rounded-lg text-sm border font-medium ${editForm.igic_percentuale === opt.val ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-300 text-slate-600'}`}>
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button type="button" onClick={() => setEditandoId(null)} className="flex-1 border border-slate-300 text-slate-600 rounded-lg py-2 text-sm">Annulla</button>
+                    <button type="button" onClick={() => handleSaveEdit(s.id)} disabled={savingEdit} className="flex-1 bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold disabled:opacity-40">
+                      {savingEdit ? 'Salvo...' : 'Salva'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-red-600">{formatEur(s.importo)}</p>
-                <p className="text-xs text-slate-400">{s.metodo_pagamento === 'cash' ? '💵 contanti' : '💳 card'}</p>
-                {s.deducibile && <span className="text-xs text-green-600 font-medium">deducibile</span>}
-                {s.foto_url && <a href={s.foto_url} target="_blank" rel="noreferrer" className="text-xs text-blue-500 block">foto</a>}
-              </div>
+              ) : (
+                <>
+                  <div className="flex justify-between items-start">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl">{s.categoria_emoji || 'box'}</span>
+                      <div>
+                        <p className="font-medium text-slate-800 text-sm">{s.categoria_nome}</p>
+                        <p className="text-xs text-slate-400">{formatData(s.data)}</p>
+                        {s.descrizione && <p className="text-xs text-slate-500">{s.descrizione}</p>}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-red-600">{formatEur(s.importo)}</p>
+                      <p className="text-xs text-slate-400">{s.metodo_pagamento === 'cash' ? '💵 contanti' : '💳 card'}</p>
+                      {s.deducibile && <span className="text-xs text-green-600 font-medium">deducibile</span>}
+                      {s.foto_url && <a href={s.foto_url} target="_blank" rel="noreferrer" className="text-xs text-blue-500 block">foto</a>}
+                    </div>
+                  </div>
+                  <div className="flex gap-3 mt-1.5">
+                    <button onClick={() => startEdit(s)} className="text-xs text-blue-500 hover:text-blue-700">Modifica</button>
+                    <button onClick={() => handleDelete(s.id)} className="text-xs text-red-400 hover:text-red-600">Elimina</button>
+                  </div>
+                </>
+              )}
             </div>
-            <button onClick={() => handleDelete(s.id)} className="text-xs text-red-400 mt-1.5 hover:text-red-600">Elimina</button>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

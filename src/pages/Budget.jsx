@@ -14,7 +14,7 @@ function getInfoTrimestre(anno, q) {
   return {
     label: `T${q} ${anno} · ${labels[q - 1]}`,
     deadline: `${deadlines[q - 1]} ${deadlineAnno}`,
-    startAnno: `${anno}-01-01`,
+    startAnno: '2026-04-01',
     start: `${anno}-${String(startMese).padStart(2, '0')}-01`,
     end: new Date(anno, endMese, 0).toISOString().slice(0, 10),
   }
@@ -41,7 +41,7 @@ export default function Budget() {
     setLoadingStima(true)
     try {
       const { startAnno, start, end } = getInfoTrimestre(annoCorrente, qCorrente)
-      const [feYTD, frYTD, enYTD, feQ, frQ, enQ, sfRes, debRes, spDedYTD, spDedQ] = await Promise.all([
+      const [feYTD, frYTD, enYTD, feQ, frQ, enQ, sfRes, debRes, spDedYTD, spDedQ, versYTD, versQ] = await Promise.all([
         supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', startAnno).lte('data', end),
         supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', startAnno).lte('data', end),
         supabase.from('entrate').select('importo_netto').gte('data', startAnno).lte('data', end).neq('dichiara', false),
@@ -52,6 +52,8 @@ export default function Budget() {
         supabase.from('debiti').select('rata_mensile,igic_percentuale,deducibile,importo_totale,importo_pagato'),
         supabase.from('spese').select('importo,igic_percentuale').eq('deducibile', true).gte('data', startAnno).lte('data', end),
         supabase.from('spese').select('importo,igic_percentuale').eq('deducibile', true).gte('data', start).lte('data', end),
+        supabase.from('versamenti').select('importo,igic_percentuale').gte('data', startAnno).lte('data', end),
+        supabase.from('versamenti').select('importo,igic_percentuale').gte('data', start).lte('data', end),
       ])
 
       function imp(f) {
@@ -65,8 +67,14 @@ export default function Budget() {
 
       const ricaviYTD = (feYTD.data || []).reduce((s, f) => s + imp(f), 0)
         + (enYTD.data || []).reduce((s, e) => s + (e.importo_netto || 0), 0)
+        + (versYTD.data || []).reduce((s, v) => {
+            const p = v.igic_percentuale || 0
+            return s + (p > 0 ? v.importo / (1 + p / 100) : v.importo)
+          }, 0)
 
-      const mesiYTD = qCorrente * 3
+      const _now = new Date()
+      const mesiYTD = Math.max(1, (_now.getFullYear() - 2026) * 12 + (_now.getMonth() + 1) - 3)
+      const mesiTrimestre = Math.min(3, Math.max(1, _now.getMonth() + 1 - (qCorrente - 1) * 3))
       const sfDed = (sfRes.data || []).filter(v => v.deducibile)
       const costiDedFisseYTD = sfDed.reduce((s, v) => {
         const p = parseFloat(v.igic_percentuale) || 0
@@ -93,6 +101,9 @@ export default function Budget() {
       }, 0) + (enQ.data || []).reduce((s, e) => {
         const lordoDich = (e.cash_dichiarato || 0) + (e.importo_card || 0)
         return s + (lordoDich - (e.importo_netto || 0))
+      }, 0) + (versQ.data || []).reduce((s, v) => {
+        const p = v.igic_percentuale || 0
+        return s + (p > 0 ? v.importo * p / (100 + p) : 0)
       }, 0)
 
       const igicUscente = (frQ.data || []).reduce((s, f) => {
@@ -102,11 +113,11 @@ export default function Budget() {
         + sfDed.reduce((s, v) => {
           const p = parseFloat(v.igic_percentuale) || 0
           return s + (p > 0 ? v.importo * p / (100 + p) : 0)
-        }, 0) * 3
+        }, 0) * mesiTrimestre
         + debDed.reduce((s, d) => {
           const p = d.igic_percentuale || 0
           return s + (p > 0 ? d.rata_mensile * p / (100 + p) : 0)
-        }, 0) * 3
+        }, 0) * mesiTrimestre
         + (spDedQ.data || []).reduce((s, sp) => {
           const p = parseFloat(sp.igic_percentuale) || 0
           return s + (p > 0 ? sp.importo * p / (100 + p) : 0)
