@@ -63,7 +63,6 @@ export default function SpeseFisse() {
         variabile: form.variabile,
         note: form.note.trim(),
       }
-
       if (editId) {
         const { error } = await supabase.from('spese_fisse').update(data).eq('id', editId)
         if (error) throw error
@@ -71,7 +70,6 @@ export default function SpeseFisse() {
         const { error } = await supabase.from('spese_fisse').insert([data])
         if (error) throw error
       }
-
       setForm(EMPTY_FORM)
       setShowForm(false)
       setEditId(null)
@@ -109,7 +107,6 @@ export default function SpeseFisse() {
 
   const totale = voci.reduce((s, v) => s + v.importo, 0)
   const totaleDeducibile = voci.filter(v => v.deducibile).reduce((s, v) => s + v.importo, 0)
-
   const vociOrdinate = [...voci].sort((a, b) => {
     if (!a.giorno_addebito && !b.giorno_addebito) return 0
     if (!a.giorno_addebito) return 1
@@ -117,199 +114,162 @@ export default function SpeseFisse() {
     return a.giorno_addebito - b.giorno_addebito
   })
 
+  const cpCard = {background:'#0e0e18',border:'1px solid rgba(0,255,255,0.15)',borderRadius:'2px',padding:'10px 12px',marginBottom:'10px',position:'relative'}
+  const cpLabel = {fontSize:'8px',letterSpacing:'.15em',color:'rgba(0,255,255,0.7)',textTransform:'uppercase',display:'block',marginBottom:'4px'}
+  const cpInput = {width:'100%',background:'#000',border:'1px solid rgba(0,255,255,0.2)',borderRadius:'2px',padding:'8px 10px',color:'#e8e8f0',fontSize:'12px',fontFamily:"'Courier New',monospace",outline:'none',boxSizing:'border-box'}
+  const cpTopLine = {position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,#0ff,transparent)',backgroundSize:'200% 100%',animation:'borderFlow 10s linear infinite'}
+
   return (
-    <div className="p-4 max-w-lg mx-auto">
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-2xl font-bold text-slate-800">Spese Fisse</h1>
-        <button
-          onClick={() => { setShowForm(s => !s); setEditId(null); setForm(EMPTY_FORM) }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-xl font-semibold text-sm"
-        >
-          {showForm && !editId ? 'Chiudi' : '+ Aggiungi'}
-        </button>
-      </div>
-      <p className="text-xs text-slate-400 mb-4">Abbonamenti e costi mensili ricorrenti (senza data di fine)</p>
+    <div style={{background:'#000',minHeight:'100vh',fontFamily:"'Courier New',monospace",paddingBottom:'80px',position:'relative'}}>
+      <style>{`
+        @keyframes scanline2{0%{top:-5%}100%{top:105%}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes borderFlow{0%{background-position:-200% 0}100%{background-position:200% 0}}
+        @media(min-width:768px){.page-wrap{max-width:1100px!important;padding:24px 40px 40px!important}.page-grid{display:grid;grid-template-columns:400px 1fr;gap:28px;align-items:start}}
+      `}</style>
+      <div style={{position:'fixed',left:0,right:0,height:'3px',background:'rgba(0,255,255,0.03)',zIndex:10,pointerEvents:'none',animation:'scanline2 24s linear infinite'}} />
 
-      {loading && <p className="text-xs text-slate-400">Caricamento...</p>}
+      <div className="page-wrap" style={{maxWidth:'390px',margin:'0 auto',padding:'16px 14px 24px',position:'relative',zIndex:2}}>
 
-      {!loading && voci.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 mb-5">
-          <div className="bg-red-50 rounded-xl p-3 border border-red-100">
-            <p className="text-xs text-red-700 font-medium mb-1">Totale mensile</p>
-            <p className="text-lg font-bold text-red-800">{formatEur(totale)}</p>
-          </div>
-          <div className="bg-green-50 rounded-xl p-3 border border-green-100">
-            <p className="text-xs text-green-700 font-medium mb-1">Deducibili/mese</p>
-            <p className="text-lg font-bold text-green-800">{formatEur(totaleDeducibile)}</p>
-            <p className="text-xs text-green-600">riducono le tasse</p>
-          </div>
+        {/* TOP BAR */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid rgba(0,255,255,0.08)',paddingBottom:'8px',marginBottom:'16px'}}>
+          <span style={{fontSize:'11px',fontWeight:700,letterSpacing:'.2em',color:'rgba(0,255,255,0.7)'}}>SPESE_FISSE</span>
+          <button onClick={()=>{setShowForm(s=>!s);setEditId(null);setForm(EMPTY_FORM)}}
+            style={{background:'transparent',border:'1px solid rgba(0,255,255,0.3)',borderRadius:'2px',color:'#00ffff',padding:'5px 10px',fontSize:'9px',fontFamily:"'Courier New',monospace",letterSpacing:'.1em',cursor:'pointer'}}>
+            {showForm && !editId ? '[CHIUDI]' : '[+ AGGIUNGI]'}
+          </button>
         </div>
-      )}
 
-      {showForm && (
-        <form onSubmit={handleSave} className="bg-white rounded-2xl border border-slate-200 p-4 mb-5 flex flex-col gap-3">
-          <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Nome</label>
-            <input
-              type="text"
-              placeholder="es. Affitto, Starlink, Lightroom..."
-              value={form.nome}
-              onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
-              autoFocus
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="text-xs font-medium text-slate-600 mb-1 block">Totale pagato €/mese</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0,00"
-                value={form.importo}
-                onChange={e => setForm(f => ({ ...f, importo: e.target.value }))}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-                type="text"
-                inputMode="decimal"
-              />
-            </div>
-            <div className="w-24">
-              <label className="text-xs font-medium text-slate-600 mb-1 block">Giorno</label>
-              <input
-                type="number"
-                min="1"
-                max="31"
-                placeholder="5"
-                value={form.giorno_addebito}
-                onChange={e => setForm(f => ({ ...f, giorno_addebito: e.target.value }))}
-                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-center"
-              />
-            </div>
-          </div>
-
-          <div className="bg-slate-50 rounded-xl p-3 flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-slate-700">Deducibile per le tasse</p>
-                <p className="text-xs text-slate-400">riduce il Mod 130 (IRPF)</p>
+        {/* TOTALI */}
+        {!loading && voci.length > 0 && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'12px',animation:'fadeUp .4s ease both'}}>
+            {[
+              {label:'TOTALE_MENSILE',val:totale,color:'#ff0040',glow:'rgba(255,0,64,0.2)'},
+              {label:'DEDUCIBILI_MESE',val:totaleDeducibile,color:'#4ade80',glow:'rgba(74,222,128,0.2)'},
+            ].map((r,i)=>(
+              <div key={i} style={{...cpCard,marginBottom:0}}>
+                <div style={cpTopLine} />
+                <div style={{fontSize:'7px',letterSpacing:'.15em',color:'rgba(255,255,255,0.65)',marginBottom:'4px'}}>{r.label}</div>
+                <div style={{fontSize:'18px',fontWeight:700,letterSpacing:'-1px',color:r.color,textShadow:`0 0 8px ${r.glow}`}}>{formatEur(r.val)}</div>
               </div>
-              <button
-                type="button"
-                onClick={() => setForm(f => ({ ...f, deducibile: !f.deducibile }))}
-                className={`w-12 h-6 rounded-full transition-colors ${form.deducibile ? 'bg-green-500' : 'bg-slate-300'}`}
-              >
-                <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${form.deducibile ? 'translate-x-6' : 'translate-x-0'}`} />
-              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="page-grid">
+        <div className="page-col">
+
+        {/* FORM */}
+        {showForm && (
+          <form onSubmit={handleSave} style={{...cpCard,marginBottom:'14px',animation:'fadeUp .3s ease both'}}>
+            <div style={cpTopLine} />
+            <div style={{fontSize:'8px',letterSpacing:'.2em',color:'rgba(0,255,255,0.7)',marginBottom:'12px'}}>{editId ? 'MODIFICA_VOCE' : 'NUOVA_SPESA_FISSA'}</div>
+
+            <div style={{marginBottom:'10px'}}>
+              <label style={cpLabel}>Nome</label>
+              <input type="text" placeholder="es. Affitto, Starlink..." value={form.nome}
+                onChange={e=>setForm(f=>({...f,nome:e.target.value}))} autoFocus style={cpInput} />
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 80px',gap:'8px',marginBottom:'10px'}}>
+              <div>
+                <label style={cpLabel}>Importo €/mese</label>
+                <input type="text" inputMode="decimal" placeholder="0,00" value={form.importo}
+                  onChange={e=>setForm(f=>({...f,importo:e.target.value}))} style={cpInput} />
+              </div>
+              <div>
+                <label style={cpLabel}>Giorno</label>
+                <input type="number" min="1" max="31" placeholder="5" value={form.giorno_addebito}
+                  onChange={e=>setForm(f=>({...f,giorno_addebito:e.target.value}))} style={{...cpInput,textAlign:'center'}} />
+              </div>
+            </div>
+
+            {/* Deducibile toggle */}
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'rgba(0,255,255,0.03)',border:'1px solid rgba(0,255,255,0.08)',borderRadius:'2px',padding:'8px 10px',marginBottom:'10px'}}>
+              <div>
+                <div style={{fontSize:'10px',color:'#e8e8f0',letterSpacing:'.05em'}}>Deducibile</div>
+                <div style={{fontSize:'8px',color:'rgba(255,255,255,0.65)',letterSpacing:'.05em'}}>riduce Mod 130</div>
+              </div>
+              <div onClick={()=>setForm(f=>({...f,deducibile:!f.deducibile}))}
+                style={{width:'32px',height:'18px',borderRadius:'9px',background:form.deducibile?'rgba(74,222,128,0.3)':'rgba(255,255,255,0.08)',border:`1px solid ${form.deducibile?'rgba(74,222,128,0.5)':'rgba(255,255,255,0.15)'}`,cursor:'pointer',position:'relative',flexShrink:0}}>
+                <div style={{position:'absolute',top:'2px',left:form.deducibile?'13px':'2px',width:'12px',height:'12px',borderRadius:'50%',background:form.deducibile?'#4ade80':'rgba(255,255,255,0.3)',transition:'left .2s'}} />
+              </div>
             </div>
 
             {form.deducibile && (
-              <div>
-                <label className="text-xs font-medium text-slate-600 mb-1 block">
-                  Tassa in fattura
-                </label>
-                <div className="flex gap-2">
-                  {[
-                    { val: '0', label: 'IVA (0% IGIC)', desc: 'es. Adobe, Google' },
-                    { val: '7', label: 'IGIC 7%', desc: 'es. Apple, locali' },
-                  ].map(opt => (
-                    <button
-                      key={opt.val}
-                      type="button"
-                      onClick={() => setForm(f => ({ ...f, igic_percentuale: opt.val }))}
-                      className={`flex-1 py-2 px-2 rounded-lg text-xs border text-left ${
-                        form.igic_percentuale === opt.val
-                          ? 'bg-blue-50 border-blue-400 text-blue-700'
-                          : 'bg-white border-slate-300 text-slate-600'
-                      }`}
-                    >
-                      <p className="font-medium">{opt.label}</p>
-                      <p className="opacity-60">{opt.desc}</p>
+              <div style={{marginBottom:'10px'}}>
+                <label style={cpLabel}>IGIC in fattura</label>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'6px'}}>
+                  {[{val:'0',label:'IVA 0%'},{val:'7',label:'IGIC 7%'}].map(opt=>(
+                    <button key={opt.val} type="button" onClick={()=>setForm(f=>({...f,igic_percentuale:opt.val}))}
+                      style={{background:'transparent',border:`1px solid ${form.igic_percentuale===opt.val?'rgba(0,255,255,0.5)':'rgba(0,255,255,0.15)'}`,borderRadius:'2px',color:form.igic_percentuale===opt.val?'#00ffff':'rgba(255,255,255,0.3)',padding:'6px',fontSize:'10px',fontFamily:"'Courier New',monospace",cursor:'pointer'}}>
+                      {opt.label}
                     </button>
                   ))}
                 </div>
-                {form.igic_percentuale === '0' && form.importo && (
-                  <p className="text-xs text-slate-400 mt-1.5">
-                    Deduce €{parseFloat(form.importo || 0).toFixed(2)} dal Mod 130 · nessun credito IGIC
-                  </p>
-                )}
-                {form.igic_percentuale === '7' && form.importo && (
-                  <p className="text-xs text-slate-400 mt-1.5">
-                    Deduce €{(parseFloat(form.importo || 0) * 100 / 107).toFixed(2)} dal Mod 130 ·
-                    credito IGIC €{(parseFloat(form.importo || 0) * 7 / 107).toFixed(2)} nel Mod 420
-                  </p>
-                )}
               </div>
             )}
+
+            <div style={{marginBottom:'10px'}}>
+              <label style={cpLabel}>Note (opzionale)</label>
+              <input type="text" placeholder="es. scade agosto 2027" value={form.note}
+                onChange={e=>setForm(f=>({...f,note:e.target.value}))} style={cpInput} />
+            </div>
+
+            <div style={{display:'flex',gap:'8px'}}>
+              {editId && (
+                <button type="button" onClick={()=>{setShowForm(false);setEditId(null);setForm(EMPTY_FORM)}}
+                  style={{flex:1,background:'transparent',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'2px',color:'rgba(255,255,255,0.65)',padding:'9px',fontSize:'10px',fontFamily:"'Courier New',monospace",cursor:'pointer',letterSpacing:'.05em'}}>
+                  [ANNULLA]
+                </button>
+              )}
+              <button type="submit" disabled={!form.nome||!form.importo||saving}
+                style={{flex:1,background:'transparent',border:'1px solid rgba(74,222,128,0.3)',borderRadius:'2px',color:'#4ade80',padding:'9px',fontSize:'10px',fontFamily:"'Courier New',monospace",letterSpacing:'.1em',cursor:'pointer',opacity:(!form.nome||!form.importo||saving)?.4:1}}>
+                {saving?'[SALVO...]':editId?'[SALVA_MODIFICHE]':'[AGGIUNGI]'}
+              </button>
+            </div>
+          </form>
+        )}
+
+        </div>{/* /page-col left */}
+        <div className="page-col">
+
+        {/* LISTA */}
+        {loading && <div style={{textAlign:'center',padding:'20px 0',fontSize:'9px',letterSpacing:'.15em',color:'rgba(0,255,255,0.65)'}}>CARICAMENTO...</div>}
+
+        {!loading && voci.length === 0 && !showForm && (
+          <div style={{textAlign:'center',padding:'30px 0'}}>
+            <div style={{fontSize:'9px',letterSpacing:'.15em',color:'rgba(0,255,255,0.6)'}}>NESSUNA_SPESA_FISSA</div>
           </div>
+        )}
 
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="variabile"
-              checked={form.variabile}
-              onChange={e => setForm(f => ({ ...f, variabile: e.target.checked }))}
-              className="w-4 h-4 rounded"
-            />
-            <label htmlFor="variabile" className="text-sm text-slate-700">Importo variabile (inserisci la media)</label>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-slate-600 mb-1 block">Note (opzionale)</label>
-            <input
-              type="text"
-              placeholder="es. scade agosto 2027"
-              value={form.note}
-              onChange={e => setForm(f => ({ ...f, note: e.target.value }))}
-              className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={!form.nome || !form.importo || saving}
-            className="bg-red-600 text-white rounded-xl py-3 font-semibold disabled:opacity-40"
-          >
-            {saving ? 'Salvo...' : editId ? 'Salva modifiche' : 'Aggiungi spesa fissa'}
-          </button>
-        </form>
-      )}
-
-      {!loading && voci.length === 0 && !showForm && (
-        <div className="text-center py-10">
-          <p className="text-slate-400 text-sm mb-2">Nessuna spesa fissa ancora</p>
-          <p className="text-slate-300 text-xs">Aggiungi affitto, abbonamenti, SS...</p>
-        </div>
-      )}
-
-      <div className="flex flex-col gap-2">
-        {vociOrdinate.map(v => (
-          <div key={v.id} className="bg-white rounded-xl border border-slate-200 p-3">
-            <div className="flex justify-between items-start">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                  <p className="font-medium text-slate-800 text-sm">{v.nome}</p>
-                  {v.deducibile && (
-                    <span className="text-xs px-1.5 py-0.5 rounded border bg-green-50 text-green-700 border-green-100">
-                      deducibile{v.igic_percentuale > 0 ? ` · IGIC ${v.igic_percentuale}%` : ' · IVA'}
-                    </span>
-                  )}
-                  {v.variabile && <span className="text-xs text-slate-400 italic">variabile</span>}
+        <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+          {vociOrdinate.map((v,i)=>(
+            <div key={v.id} style={{...cpCard,marginBottom:0,animation:`fadeUp .4s ease both ${i*0.2}s`}}>
+              <div style={cpTopLine} />
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:'11px',fontWeight:700,color:'#e8e8f0',letterSpacing:'.05em',marginBottom:'2px'}}>{v.nome}</div>
+                  <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+                    {v.giorno_addebito && <span style={{fontSize:'8px',color:'rgba(255,255,255,0.65)',letterSpacing:'.05em'}}>ogni {v.giorno_addebito} del mese</span>}
+                    {v.deducibile && <span style={{fontSize:'7px',letterSpacing:'.1em',color:'rgba(74,222,128,0.7)',border:'1px solid rgba(74,222,128,0.2)',padding:'1px 6px',borderRadius:'2px'}}>DED{v.igic_percentuale>0?` IGIC${v.igic_percentuale}%`:' IVA'}</span>}
+                    {v.variabile && <span style={{fontSize:'7px',color:'rgba(255,215,0,0.75)',letterSpacing:'.05em'}}>variabile</span>}
+                  </div>
+                  {v.note && <div style={{fontSize:'9px',color:'rgba(255,255,255,0.6)',marginTop:'2px'}}>{v.note}</div>}
                 </div>
-                {v.giorno_addebito && (
-                  <p className="text-xs text-slate-400">ogni {v.giorno_addebito} del mese</p>
-                )}
-                {v.note && <p className="text-xs text-slate-500">{v.note}</p>}
+                <div style={{fontSize:'16px',fontWeight:700,color:'#ff0040',textShadow:'0 0 6px rgba(255,0,64,0.2)',letterSpacing:'-1px',marginLeft:'12px',flexShrink:0}}>{formatEur(v.importo)}</div>
               </div>
-              <p className="font-bold text-red-600 ml-3 flex-shrink-0">{formatEur(v.importo)}</p>
+              <div style={{display:'flex',gap:'12px',marginTop:'8px',borderTop:'1px solid rgba(255,255,255,0.04)',paddingTop:'6px'}}>
+                <button onClick={()=>startEdit(v)} style={{background:'none',border:'none',color:'rgba(0,255,255,0.75)',fontSize:'9px',letterSpacing:'.1em',cursor:'pointer',padding:0,fontFamily:"'Courier New',monospace"}}>MODIFICA</button>
+                <button onClick={()=>handleDelete(v.id)} style={{background:'none',border:'none',color:'rgba(255,0,64,0.65)',fontSize:'9px',letterSpacing:'.1em',cursor:'pointer',padding:0,fontFamily:"'Courier New',monospace"}}>ELIMINA</button>
+              </div>
             </div>
-            <div className="flex gap-3 mt-2">
-              <button onClick={() => startEdit(v)} className="text-xs text-blue-500 hover:text-blue-700">Modifica</button>
-              <button onClick={() => handleDelete(v.id)} className="text-xs text-red-400 hover:text-red-600">Elimina</button>
-            </div>
-          </div>
-        ))}
+          ))}
+        </div>
+
+        </div>{/* /page-col right */}
+        </div>{/* /page-grid */}
+
       </div>
     </div>
   )

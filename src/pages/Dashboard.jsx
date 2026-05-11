@@ -102,13 +102,6 @@ export default function Dashboard() {
   const [saldoContanti, setSaldoContanti] = useState(null)
   const [versamentiMese, setVersamentiMese] = useState([])
   const [prossimaRata, setProssimaRata] = useState(null)
-  const [entrateTS, setEntrateTS] = useState([])
-  const [commissioneRecord, setCommissioneRecord] = useState(null)
-  const [showAzzera, setShowAzzera] = useState(false)
-  const [azzeraInput, setAzzeraInput] = useState('')
-  const [savingAzzera, setSavingAzzera] = useState(false)
-  const [accontoInput, setAccontoInput] = useState('')
-  const [savingAcconto, setSavingAcconto] = useState(false)
 
   const meseStr = `${anno}-${String(mese).padStart(2, '0')}`
   const ultimoGiorno = new Date(anno, mese, 0).getDate()
@@ -199,22 +192,22 @@ export default function Dashboard() {
       const meseStr = `${anno}-${String(mese).padStart(2, '0')}`
       const ultimoGiornoMese = new Date(anno, mese, 0).getDate()
       const oggi = new Date().toISOString().slice(0, 10)
-      const [feYTD, frYTD, enYTD, feQ, frQ, enQ, debRes, rateMeseRes, spDedYTD, spDedQ, versYTD, versQ, prossRataRes, entrateTSRes, commissioneRes] = await Promise.all([
-        supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', startAnno).lte('data', end),
-        supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', startAnno).lte('data', end),
-        supabase.from('entrate').select('importo_netto').gte('data', startAnno).lte('data', end).neq('dichiara', false),
-        supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', start).lte('data', end),
-        supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', start).lte('data', end),
-        supabase.from('entrate').select('importo_netto,igic_percentuale,cash_dichiarato,importo_card').gte('data', start).lte('data', end).neq('dichiara', false),
+      // Cap al mese visualizzato: i mesi chiusi usano solo i propri dati, non quelli futuri
+      const capData = `${meseStr}-${ultimoGiornoMese}`
+      const [feYTD, frYTD, enYTD, feQ, frQ, enQ, debRes, rateMeseRes, spDedYTD, spDedQ, versYTD, versQ, prossRataRes] = await Promise.all([
+        supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', startAnno).lte('data', capData),
+        supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', startAnno).lte('data', capData),
+        supabase.from('entrate').select('importo_netto').gte('data', startAnno).lte('data', capData).neq('dichiara', false),
+        supabase.from('fatture_emesse').select('totale,igic_percentuale').gte('data', start).lte('data', capData),
+        supabase.from('fatture_ricevute').select('totale,igic_percentuale').gte('data', start).lte('data', capData),
+        supabase.from('entrate').select('importo_netto,igic_percentuale,cash_dichiarato,importo_card').gte('data', start).lte('data', capData).neq('dichiara', false),
         supabase.from('debiti').select('id,nome,rata_mensile,importo_totale,importo_pagato,igic_percentuale,deducibile,data_fine'),
         supabase.from('rate_debito').select('id,importo,debito_id,data_scadenza,pagato,numero_rata').gte('data_scadenza', `${meseStr}-01`).lte('data_scadenza', `${meseStr}-${ultimoGiornoMese}`).eq('pagato', false),
-        supabase.from('spese').select('importo,igic_percentuale').eq('deducibile', true).gte('data', startAnno).lte('data', end),
-        supabase.from('spese').select('importo,igic_percentuale').eq('deducibile', true).gte('data', start).lte('data', end),
-        supabase.from('versamenti').select('importo,igic_percentuale').gte('data', startAnno).lte('data', end),
-        supabase.from('versamenti').select('importo,igic_percentuale').gte('data', start).lte('data', end),
+        supabase.from('spese').select('importo,igic_percentuale').eq('deducibile', true).gte('data', startAnno).lte('data', capData),
+        supabase.from('spese').select('importo,igic_percentuale').eq('deducibile', true).gte('data', start).lte('data', capData),
+        supabase.from('versamenti').select('importo,igic_percentuale').gte('data', startAnno).lte('data', capData),
+        supabase.from('versamenti').select('importo,igic_percentuale').gte('data', start).lte('data', capData),
         supabase.from('rate_debito').select('importo,debito_id,data_scadenza').eq('pagato', false).gte('data_scadenza', oggi).order('data_scadenza', { ascending: true }).limit(1),
-        supabase.from('entrate').select('importo_lordo').gte('data', start).lte('data', end).eq('attivita_nome', 'Tenerife Stars'),
-        supabase.from('commissioni_guida').select('*').eq('anno', infoQ.anno).eq('trimestre', infoQ.q).maybeSingle(),
       ])
       const tuttiDebiti = debRes.data || []
       const attivi = tuttiDebiti.filter(d => (d.importo_totale - (d.importo_pagato || 0)) > 0)
@@ -239,10 +232,6 @@ export default function Dashboard() {
       setDebitiMap(mapDebiti)
       const pr = prossRataRes.data?.[0] || null
       setProssimaRata(pr ? { ...pr, nomeDebito: mapDebiti[pr.debito_id] || 'Debito' } : null)
-      setEntrateTS(entrateTSRes.data || [])
-      const rec = commissioneRes.data
-      setCommissioneRecord(rec)
-      setAccontoInput(rec?.acconto > 0 ? String(rec.acconto) : '')
     } catch (err) {
       console.error('Errore trimestre:', err.message)
     }
@@ -274,54 +263,6 @@ export default function Dashboard() {
       console.error('Errore reset:', err.message)
     } finally {
       setResetting(false)
-    }
-  }
-
-  async function handleSalvaAcconto() {
-    const importo = parseFloat(String(accontoInput).replace(',', '.')) || 0
-    setSavingAcconto(true)
-    try {
-      await supabase.from('commissioni_guida').upsert(
-        { anno: infoQ.anno, trimestre: infoQ.q, acconto: importo, saldata: false },
-        { onConflict: 'anno,trimestre' }
-      )
-      setCommissioneRecord(prev => ({
-        ...(prev || { anno: infoQ.anno, trimestre: infoQ.q, saldata: false, fattura_importo: null }),
-        acconto: importo,
-      }))
-    } catch (err) {
-      console.error('Errore salva acconto:', err.message)
-    } finally {
-      setSavingAcconto(false)
-    }
-  }
-
-  async function handleAzzera() {
-    const importo = parseFloat(String(azzeraInput).replace(',', '.'))
-    if (!importo || importo <= 0) return
-    setSavingAzzera(true)
-    try {
-      const oggi = new Date().toISOString().slice(0, 10)
-      await Promise.all([
-        supabase.from('fatture_ricevute').insert({
-          data: oggi,
-          fornitore_nome: 'Tenerife Stars',
-          totale: importo,
-          igic_percentuale: 7,
-          note: `Commissione guida T${infoQ.q} ${infoQ.anno}`,
-        }),
-        supabase.from('commissioni_guida').upsert(
-          { anno: infoQ.anno, trimestre: infoQ.q, saldata: true, fattura_importo: importo },
-          { onConflict: 'anno,trimestre' }
-        ),
-      ])
-      setShowAzzera(false)
-      setAzzeraInput('')
-      await Promise.all([loadDati(), loadTrimestre(), loadSettimana()])
-    } catch (err) {
-      console.error('Errore azzera commissione:', err.message)
-    } finally {
-      setSavingAzzera(false)
     }
   }
 
@@ -467,7 +408,7 @@ export default function Dashboard() {
   const igicQ = Math.max(0, igicRepercutido - igicSoportadoTotale)
 
   // Salva stima tasse mensili per la pagina Risparmi
-  const tasseMensili = (irpfQ + igicQ) / 3
+  const tasseMensili = (irpfQ + igicQ) / mesiTrimestre
   if (tasseMensili > 0) localStorage.setItem('tasse_mensili_stima', tasseMensili.toFixed(2))
 
   // Flusso mensile banca vs contanti
@@ -480,299 +421,213 @@ export default function Dashboard() {
   const saldoBancaMese = entrateBancaMese + totaleFattureEmesse - usciteBancaMese + totaleVersamentiMese
   const saldoContantiMese = entrateContantiMese - speseCashMese - totaleVersamentiMese
 
-  const puntoPareggioMese = totaleFisso + totaleRateMensili + tasseMensili
+  // Commissione guida Tenerife Stars — stima mensile dal mese selezionato
+  const entrateTSMese = entrate.filter(e => e.attivita_nome === 'Tenerife Stars')
+  const commissioneMese = Math.max(0,
+    entrateTSMese.reduce((s, e) => s + (e.importo_lordo || 0) * 0.33, 0) - entrateTSMese.length * 10
+  )
+
+  const puntoPareggioMese = totaleFisso + totaleRateMensili + tasseMensili + commissioneMese
   const beneficio = totaleEntrate - totaleSpese - totaleFattureRicevute - puntoPareggioMese
   const totaleResiduo = debitiAttivi.reduce((s, d) => s + (d.importo_totale - (d.importo_pagato || 0)), 0)
 
-  // Commissione guida Tenerife Stars
-  const commissioneStimata = Math.max(0,
-    entrateTS.reduce((s, e) => s + (e.importo_lordo || 0) * 0.33, 0) - entrateTS.length * 10
-  )
-  const acconto = commissioneRecord?.acconto || 0
-  const ancoraRa = Math.max(0, commissioneStimata - acconto)
-  const beneficioReale = beneficio - ancoraRa
-  const targetReale = totaleSpese + totaleFattureRicevute + puntoPareggioMese + ancoraRa
-  const progPctReale = targetReale > 0 ? Math.min(100, totaleEntrate / targetReale * 100) : 100
   const giorniTotaliMese = new Date(anno, mese, 0).getDate()
   const isCurrentMonth = anno === now.getFullYear() && mese === now.getMonth() + 1
   const giorniRimasti = isCurrentMonth ? Math.max(0, giorniTotaliMese - now.getDate()) : 0
+  const targetReale = totaleSpese + totaleFattureRicevute + puntoPareggioMese
+  const progPctReale = targetReale > 0 ? Math.min(100, totaleEntrate / targetReale * 100) : 100
   const mancaReale = Math.max(0, targetReale - totaleEntrate)
   const targetGiornalieroReale = giorniRimasti > 0 ? mancaReale / giorniRimasti : 0
 
+  const C = beneficio >= 0 ? '#4ade80' : '#ff0040'
+  const CG = beneficio >= 0 ? 'rgba(74,222,128,0.3)' : 'rgba(255,0,64,0.3)'
+
   return (
-    <div className="min-h-screen bg-white pb-24">
-      <div className="max-w-lg mx-auto px-4 pt-6">
+    <div style={{background:'#000',minHeight:'100vh',paddingBottom:'80px',fontFamily:"'Courier New',monospace",overflowX:'hidden',position:'relative'}}>
 
-        {/* NUMERO PRINCIPALE */}
-        <div className="flex items-center justify-between mb-1">
-          <button onClick={mesePrecedente} className="text-2xl text-slate-300 active:text-slate-500 px-1">‹</button>
-          <p className="text-xs text-slate-400 uppercase tracking-widest">{getMeseLabel(anno, mese)} — quello che è tuo</p>
-          <button onClick={meseSuccessivo} className="text-2xl text-slate-300 active:text-slate-500 px-1">›</button>
+      <style>{`
+        @keyframes scanline{0%{top:-5%}100%{top:105%}}
+        @keyframes rainDrop{0%{transform:translateY(-30px);opacity:0}10%{opacity:1}90%{opacity:.6}100%{transform:translateY(300px);opacity:0}}
+        @keyframes npGreen{0%,100%{text-shadow:0 0 6px #4ade80,0 0 18px #4ade80}50%{text-shadow:0 0 2px #4ade80,0 0 8px #4ade80}}
+        @keyframes npRed{0%,100%{text-shadow:0 0 6px #ff0040,0 0 18px #ff0040}50%{text-shadow:0 0 2px #ff0040,0 0 8px #ff0040}}
+        @keyframes npCyan{0%,100%{text-shadow:0 0 6px #0ff,0 0 18px #0ff}50%{text-shadow:0 0 2px #0ff,0 0 8px #0ff}}
+        @keyframes glitch{0%,88%,100%{transform:none}89%{transform:translate(2px,0)}91%{transform:translate(-2px,0)}}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+        @keyframes spin16{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        @keyframes spinRev12{from{transform:rotate(0deg)}to{transform:rotate(-360deg)}}
+        @keyframes orbitA{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+        @keyframes orbitB{from{transform:rotate(120deg)}to{transform:rotate(480deg)}}
+        @keyframes orbitC{from{transform:rotate(240deg)}to{transform:rotate(600deg)}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes borderFlow{0%{background-position:-200% 0}100%{background-position:200% 0}}
+        @keyframes slideIn{from{width:0}to{width:var(--w,0%)}}
+        @media(min-width:768px){.dash-wrap{max-width:1100px!important;padding:24px 48px 48px!important}.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start}}
+      `}</style>
+
+      {/* SCANLINE */}
+      <div style={{position:'fixed',left:0,right:0,height:'3px',background:'rgba(0,255,255,0.04)',zIndex:10,pointerEvents:'none',animation:'scanline 24s linear infinite'}} />
+
+      {/* BINARY RAIN */}
+      <div style={{position:'absolute',top:0,left:0,right:0,height:'380px',zIndex:1,overflow:'hidden',pointerEvents:'none'}}>
+        {['8%','25%','45%','65%','85%'].map((l,i)=>(
+          <div key={i} style={{position:'absolute',left:l,top:0,color:'rgba(0,255,255,0.05)',fontSize:'10px',animation:`rainDrop ${[14,13,18,15,20][i]}s ease-in infinite`,animationDelay:`${i*0.5}s`}}>
+            {['01101','10010','11001','01010','10110'][i]}
+          </div>
+        ))}
+      </div>
+
+      <div className="dash-wrap" style={{maxWidth:'390px',margin:'0 auto',padding:'18px 16px 28px',position:'relative',zIndex:2}}>
+
+        {/* TOP BAR */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid rgba(0,255,255,0.12)',paddingBottom:'8px',marginBottom:'20px'}}>
+          <span style={{fontSize:'8px',letterSpacing:'.2em',color:'rgba(0,255,255,0.75)'}}>METAPROOS_OS v2.6</span>
+          <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+            <div style={{width:'5px',height:'5px',borderRadius:'50%',background:C,boxShadow:`0 0 6px ${C}`,animation:'blink 6s ease infinite'}} />
+            <span style={{fontSize:'8px',letterSpacing:'.2em',color:C}}>{beneficio>=0?'SURPLUS':'DEFICIT'}</span>
+          </div>
         </div>
-        <p className={`text-6xl font-bold mb-1 ${beneficio >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-          {beneficio >= 0 ? '+' : ''}{fmtBig(beneficio)}
-        </p>
-        <p className="text-sm text-slate-400 mb-6">dopo spese, rate e tasse</p>
 
-        {/* STATO OBIETTIVO */}
-        <p className="text-xs text-slate-400 mb-6">
-          {beneficio >= 0
-            ? `✓ Mese positivo — surplus ${fmtBig(beneficio)}`
-            : `⚠️ Mese in rosso di ${fmtBig(Math.abs(beneficio))} — tasse incluse`}
-        </p>
+        {/* MONTH NAV */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'24px'}}>
+          <button onClick={mesePrecedente} style={{background:'transparent',border:'none',color:'rgba(0,255,255,0.7)',fontSize:'20px',cursor:'pointer',padding:'4px 8px',fontFamily:"'Courier New',monospace"}}>‹</button>
+          <span style={{fontSize:'9px',letterSpacing:'.2em',color:'rgba(0,255,255,0.75)',textTransform:'uppercase'}}>{getMeseLabel(anno,mese)}</span>
+          <button onClick={meseSuccessivo} style={{background:'transparent',border:'none',color:'rgba(0,255,255,0.7)',fontSize:'20px',cursor:'pointer',padding:'4px 8px',fontFamily:"'Courier New',monospace"}}>›</button>
+        </div>
 
-        {/* PATRIMONIO */}
-        {saldoBanca !== null && (
-          <div className="bg-slate-50 rounded-2xl p-4 mb-6">
-            <p className="text-xs text-slate-400 uppercase tracking-widest mb-3">Patrimonio netto</p>
-            <div className="grid grid-cols-2 gap-3 mb-3">
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Banca</p>
-                <p className={`text-xl font-bold ${saldoBanca >= 0 ? 'text-slate-700' : 'text-red-500'}`}>
-                  {formatEur(saldoBanca)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-slate-400 mb-0.5">Contanti</p>
-                <p className={`text-xl font-bold ${saldoContanti >= 0 ? 'text-slate-700' : 'text-red-500'}`}>
-                  {formatEur(saldoContanti)}
-                </p>
+        <div className="dash-grid">
+        <div className="dash-col">
+
+        {/* SFERA + CERCHIO AFFIANCATI */}
+        <div style={{display:'flex',gap:'12px',justifyContent:'center',alignItems:'center',marginBottom:'8px'}}>
+
+          {/* SFERA ESAGONALE */}
+          <div style={{position:'relative',width:'150px',height:'150px',flexShrink:0}}>
+            <div style={{position:'absolute',inset:0,animation:'spin16 64s linear infinite'}}>
+              <div style={{width:'100%',height:'100%',clipPath:'polygon(50% 0%,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%)',background:beneficio>=0?'rgba(74,222,128,0.15)':'rgba(255,0,64,0.15)'}}>
+                <div style={{position:'absolute',inset:'2px',clipPath:'polygon(50% 0%,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%)',background:'#000'}} />
               </div>
             </div>
-            <div className="flex justify-between border-t border-slate-200 pt-2">
-              <span className="text-xs text-slate-500">Totale</span>
-              <span className={`text-sm font-bold ${saldoConto >= 0 ? 'text-slate-700' : 'text-red-500'}`}>
-                {formatEur(saldoConto)}
+            <div style={{position:'absolute',inset:'16px',animation:'spinRev12 48s linear infinite'}}>
+              <div style={{width:'100%',height:'100%',clipPath:'polygon(50% 0%,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%)',background:'rgba(0,255,255,0.1)'}}>
+                <div style={{position:'absolute',inset:'2px',clipPath:'polygon(50% 0%,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%)',background:'#000'}} />
+              </div>
+            </div>
+            {[
+              {anim:'orbitA',dur:'28s',color:'#0ff',glow:'rgba(0,255,255,0.8)'},
+              {anim:'orbitB',dur:'36s',color:'#f0f',glow:'rgba(255,0,255,0.8)'},
+              {anim:'orbitC',dur:'44s',color:'#ff0',glow:'rgba(255,255,0,0.8)'},
+            ].map((d,i)=>(
+              <div key={i} style={{position:'absolute',top:'50%',left:'50%',width:'105px',height:'105px',marginTop:'-52px',marginLeft:'-52px',animation:`${d.anim} ${d.dur} linear infinite`}}>
+                <div style={{position:'absolute',top:0,left:'50%',transform:'translateX(-50%)',width:'4px',height:'4px',borderRadius:'50%',background:d.color,boxShadow:`0 0 5px ${d.glow}`}} />
+              </div>
+            ))}
+            <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',width:'82px',height:'82px',borderRadius:'50%',background:`radial-gradient(circle, ${CG.replace('0.3','0.08')} 0%, #000 70%)`,border:`1px solid ${CG}`,boxShadow:`0 0 16px ${CG},inset 0 0 16px ${CG.replace('0.3','0.05')}`,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+              <span style={{fontSize:'18px',fontWeight:700,letterSpacing:'-1px',color:C,animation:beneficio>=0?'npGreen 12s ease infinite':'npRed 12s ease infinite,glitch 30s ease infinite',fontFamily:"'Courier New',monospace"}}>
+                {beneficio>=0?'+':''}{fmtBig(beneficio)}
+              </span>
+              <span style={{fontSize:'6px',letterSpacing:'.12em',color:'rgba(255,255,255,0.65)',marginTop:'2px'}}>
+                {beneficio>=0?'SURPLUS':'DEFICIT'}
               </span>
             </div>
           </div>
-        )}
 
-        {/* COMMISSIONE GUIDA */}
-        <div className="flex items-center gap-3 mb-4">
-          <div className="flex-1 h-px bg-slate-200" />
-          <span className="text-xs text-slate-400 uppercase tracking-widest whitespace-nowrap">Commissione guida</span>
-          <div className="flex-1 h-px bg-slate-200" />
-        </div>
-
-        {commissioneRecord?.saldata ? (
-          <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-6">
-            <p className="text-xs text-indigo-500 uppercase tracking-wide mb-2">T{infoQ.q} {infoQ.anno}</p>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-xl font-bold text-indigo-700">{fmtBig(commissioneRecord.fattura_importo)}</span>
-              <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full">✓ fattura inserita</span>
+          {/* CERCHIO TARGET */}
+          {isCurrentMonth?(
+            <div style={{width:'150px',height:'150px',borderRadius:'50%',background:'#0e0e18',border:`1px solid ${mancaReale>0?'rgba(0,255,255,0.25)':'rgba(74,222,128,0.3)'}`,boxShadow:mancaReale>0?'0 0 20px rgba(0,255,255,0.06)':'0 0 20px rgba(74,222,128,0.06)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',position:'relative',flexShrink:0}}>
+              <div style={{position:'absolute',inset:'6px',borderRadius:'50%',border:`1px solid ${mancaReale>0?'rgba(0,255,255,0.07)':'rgba(74,222,128,0.1)'}`}} />
+              {mancaReale>0?(
+                <>
+                  <span style={{fontSize:'30px',fontWeight:700,letterSpacing:'-2px',color:'#00ffff',textShadow:'0 0 14px rgba(0,255,255,0.5)',animation:'npCyan 12s ease infinite',fontFamily:"'Courier New',monospace",lineHeight:1}}>
+                    {fmtBig(targetGiornalieroReale)}
+                  </span>
+                  <span style={{fontSize:'7px',letterSpacing:'.18em',color:'rgba(0,255,255,0.7)',marginTop:'5px',fontFamily:"'Courier New',monospace"}}>AL GIORNO</span>
+                </>
+              ):(
+                <>
+                  <span style={{fontSize:'10px',fontWeight:700,letterSpacing:'.08em',color:'#4ade80',textShadow:'0 0 10px rgba(74,222,128,0.5)',animation:'npGreen 12s ease infinite',fontFamily:"'Courier New',monospace",textAlign:'center',lineHeight:1.4}}>TARGET{'\n'}RAGGIUNTO</span>
+                  <span style={{fontSize:'16px',fontWeight:700,color:'#4ade80',marginTop:'4px',fontFamily:"'Courier New',monospace"}}>{Math.round(progPctReale)}%</span>
+                </>
+              )}
             </div>
-            <p className="text-xs text-indigo-400">registrata come fattura ricevuta · trimestre chiuso</p>
-          </div>
-        ) : (
-          <div className="bg-indigo-50 border border-indigo-200 rounded-2xl p-4 mb-6">
-            <p className="text-xs text-indigo-500 uppercase tracking-wide mb-3">Scenario reale con commissione guida</p>
-
-            <div className="bg-white rounded-xl px-3 py-2.5 flex flex-col gap-1.5 text-xs text-slate-500 mb-3">
-              <div className="flex justify-between">
-                <span>Commissione stimata ({entrateTS.length} gg)</span>
-                <span className="font-medium text-slate-700">−{fmtBig(commissioneStimata)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span>Già pagato</span>
-                <div className="flex items-center gap-1">
-                  <span className="text-slate-400">−€</span>
-                  <input
-                    type="number" inputMode="decimal"
-                    value={accontoInput}
-                    onChange={e => setAccontoInput(e.target.value)}
-                    placeholder="0"
-                    className="w-20 border border-slate-300 rounded-lg px-2 py-0.5 text-right text-xs bg-white"
-                  />
-                  <button
-                    onClick={handleSalvaAcconto}
-                    disabled={savingAcconto}
-                    className="bg-indigo-600 text-white rounded-lg px-2 py-0.5 text-xs font-bold disabled:opacity-40">
-                    {savingAcconto ? '…' : '✓'}
-                  </button>
-                </div>
-              </div>
-              <div className="flex justify-between border-t border-slate-200 pt-1.5 mt-0.5 font-semibold text-slate-700">
-                <span>Ancora da pagare</span>
-                <span className="text-indigo-700">−{fmtBig(ancoraRa)}</span>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center mb-3">
-              <p className="text-xs text-slate-500">Beneficio reale stimato</p>
-              <p className={`text-2xl font-bold ${beneficioReale >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {beneficioReale >= 0 ? '+' : ''}{fmtBig(beneficioReale)}
-              </p>
-            </div>
-
-            <div className="h-2 bg-indigo-100 rounded-full overflow-hidden mb-1.5">
-              <div className={`h-full rounded-full transition-all ${progPctReale >= 100 ? 'bg-green-500' : 'bg-indigo-400'}`}
-                style={{ width: `${progPctReale}%` }} />
-            </div>
-            <div className="flex justify-between text-xs text-slate-400 mb-3">
-              <span>Guadagnato: <strong className="text-slate-600">{fmtBig(totaleEntrate)}</strong></span>
-              <span>Serve: <strong className="text-slate-600">{fmtBig(targetReale)}</strong></span>
-            </div>
-
-            {giorniRimasti > 0 && targetGiornalieroReale > 0 && (
-              <p className="text-xs text-slate-500 bg-white rounded-xl px-3 py-2 mb-3">
-                Devi guadagnare <strong className="text-indigo-600">{fmtBig(targetGiornalieroReale)}/giorno</strong> nei prossimi {giorniRimasti} giorni
-              </p>
-            )}
-
-            <button onClick={() => setShowAzzera(true)}
-              className="w-full bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold active:bg-indigo-700">
-              Azzera — inserisci fattura trimestrale
-            </button>
-          </div>
-        )}
-
-        {/* BREAKDOWN */}
-        <div className="bg-slate-50 rounded-2xl p-4 mb-4">
-          <div className="flex justify-between py-2 text-sm border-b border-slate-200">
-            <span className="text-slate-500">Entrate nette</span>
-            <span className="font-medium text-green-600">+{fmtBig(totaleEntrate)}</span>
-          </div>
-          <div className="flex justify-between py-2 text-sm border-b border-slate-200">
-            <span className="text-slate-500">Spese variabili</span>
-            <span className="font-medium text-red-500">−{fmtBig(totaleSpese)}</span>
-          </div>
-          {totaleFattureRicevute > 0 && (
-            <div className="flex justify-between py-2 text-sm border-b border-slate-200">
-              <span className="text-slate-500">Fatture ricevute</span>
-              <span className="font-medium text-red-500">−{fmtBig(totaleFattureRicevute)}</span>
+          ):(
+            <div style={{width:'150px',height:'150px',borderRadius:'50%',background:'#0a0a0f',border:'1px solid rgba(0,255,255,0.08)',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+              <span style={{fontSize:'7px',letterSpacing:'.15em',color:'rgba(0,255,255,0.6)',fontFamily:"'Courier New',monospace",textAlign:'center'}}>TARGET{'\n'}N/D</span>
             </div>
           )}
-          <div className="flex justify-between py-2 text-sm border-b border-slate-200">
-            <span className="text-slate-500">Spese fisse</span>
-            <span className="font-medium text-red-500">−{fmtBig(totaleFisso)}</span>
+        </div>
+
+        {/* INFO SOTTO I DUE CERCHI */}
+        {isCurrentMonth&&(
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'16px',paddingLeft:'4px',paddingRight:'4px'}}>
+            <div style={{textAlign:'center'}}>
+              <div style={{fontSize:'7px',letterSpacing:'.15em',color:'rgba(74,222,128,0.5)',marginBottom:'2px'}}>EARNED</div>
+              <div style={{fontSize:'13px',fontWeight:700,color:'#4ade80',letterSpacing:'-1px'}}>{fmtBig(totaleEntrate)}</div>
+            </div>
+            <div style={{textAlign:'center'}}>
+              <div style={{fontSize:'7px',letterSpacing:'.15em',color:'rgba(255,255,255,0.65)',marginBottom:'2px'}}>TARGET · {giorniRimasti}gg</div>
+              <div style={{fontSize:'13px',fontWeight:700,color:'rgba(255,255,255,0.75)',letterSpacing:'-1px'}}>{fmtBig(targetReale)}</div>
+            </div>
           </div>
-          <div className="flex justify-between py-2 text-sm border-b border-slate-200">
-            <span className="text-slate-500">Rate debiti</span>
-            <span className="font-medium text-red-500">−{fmtBig(totaleRateMensili)}</span>
+        )}
+
+        {/* COMMISSIONE */}
+        <div style={{background:'#0e0e18',border:'1px solid rgba(0,255,255,0.15)',borderRadius:'2px',padding:'10px 12px',marginBottom:'12px',position:'relative',animation:'fadeUp .4s ease both .4s'}}>
+          <div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,#0ff,transparent)',backgroundSize:'200% 100%',animation:'borderFlow 10s linear infinite'}} />
+          <div style={{fontSize:'8px',letterSpacing:'.2em',color:'rgba(0,255,255,0.7)',marginBottom:'10px'}}>COMMISSIONE // T{infoQ.q}_{infoQ.anno}</div>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:'10px'}}>
+            <span style={{color:'rgba(255,255,255,0.7)',letterSpacing:'.05em'}}>STIMA_COMM ({entrateTSMese.length} GG)</span>
+            <span style={{color:'#e8e8f0',fontWeight:700}}>−{fmtBig(commissioneMese)}</span>
           </div>
-          <div className="flex justify-between py-2 text-sm border-b border-slate-200">
-            <span className="text-slate-500">Tasse da parte</span>
-            <span className="font-medium text-amber-500">−{fmtBig(tasseMensili)}</span>
-          </div>
-          <div className="flex justify-between pt-3 text-base font-semibold">
-            <span>Rimane a te</span>
-            <span className={beneficio >= 0 ? 'text-green-500' : 'text-red-500'}>
-              {beneficio >= 0 ? '+' : ''}{fmtBig(beneficio)}
+        </div>
+
+        </div>{/* /dash-col left */}
+        <div className="dash-col">
+
+        {/* FLUSSO MENSILE */}
+        <div style={{background:'#0e0e18',border:'1px solid rgba(0,255,255,0.15)',borderRadius:'2px',padding:'10px 12px',marginBottom:'12px',position:'relative',animation:'fadeUp .4s ease both .8s'}}>
+          <div style={{position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,#0ff,transparent)',backgroundSize:'200% 100%',animation:'borderFlow 10s linear infinite'}} />
+          <div style={{fontSize:'8px',letterSpacing:'.2em',color:'rgba(0,255,255,0.7)',marginBottom:'8px'}}>FLUSSO_MENSILE</div>
+          {[
+            {dot:'#4ade80',label:'ENTRATE_NETTE',val:`+${fmtBig(totaleEntrate)}`,color:'#4ade80'},
+            ...(totaleSpese>0?[{dot:'#ff0040',label:'SPESE_VARIABILI',val:`−${fmtBig(totaleSpese)}`,color:'#ff0040'}]:[]),
+            ...(totaleFattureRicevute>0?[{dot:'#ff0040',label:'FATTURE_RICEVUTE',val:`−${fmtBig(totaleFattureRicevute)}`,color:'#ff0040'}]:[]),
+            {dot:'#ff0040',label:'SPESE_FISSE',val:`−${fmtBig(totaleFisso)}`,color:'#ff0040'},
+            {dot:'#ff0040',label:'RATE_DEBITI',val:`−${fmtBig(totaleRateMensili)}`,color:'#ff0040'},
+            {dot:'#f0f',label:'TASSE_DA_PARTE',val:`−${fmtBig(tasseMensili)}`,color:'#f0f'},
+            ...(commissioneMese>0?[{dot:'rgba(255,165,0,0.8)',label:'COMM_GUIDA',val:`−${fmtBig(commissioneMese)}`,color:'rgba(255,165,0,0.8)'}]:[]),
+          ].map((r,i)=>(
+            <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid rgba(255,255,255,0.04)',padding:'5px 0',fontSize:'10px'}}>
+              <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                <div style={{width:'4px',height:'4px',borderRadius:'50%',background:r.dot,boxShadow:`0 0 4px ${r.dot}`,flexShrink:0}} />
+                <span style={{color:'rgba(255,255,255,0.65)',letterSpacing:'.05em'}}>{r.label}</span>
+              </div>
+              <span style={{color:r.color,fontWeight:700}}>{r.val}</span>
+            </div>
+          ))}
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:'8px'}}>
+            <span style={{fontSize:'9px',letterSpacing:'.15em',color:'rgba(255,255,255,0.75)'}}>RIMANE_A_TE</span>
+            <span style={{fontSize:'20px',fontWeight:700,letterSpacing:'-1px',color:C,textShadow:`0 0 8px ${CG}`}}>
+              {beneficio>=0?'+':''}{fmtBig(beneficio)}
             </span>
           </div>
         </div>
 
-        {/* SALDO REALE */}
-        <div className={`rounded-2xl border p-4 mb-4 cursor-pointer ${saldoRealeBg}`}
-             onClick={() => setShowDettaglioSaldo(s => !s)}>
-          <p className="text-xs font-medium text-slate-500 mb-1">Saldo reale mensile</p>
-          <p className={`text-3xl font-bold ${saldoRealeColore}`}>{formatEur(saldoReale)}</p>
-          <p className="text-xs text-slate-400 mt-1">dopo spese fisse e rate debiti · tap per dettaglio</p>
-
-          {showDettaglioSaldo && (
-            <div className="mt-3 border-t border-slate-200 pt-3 flex flex-col gap-1.5 text-xs">
-              <div className="flex justify-between text-slate-700">
-                <span>Entrate nette</span>
-                <span className="text-green-600 font-medium">+{formatEur(totaleEntrate)}</span>
-              </div>
-              {totaleSpese > 0 && (
-                <div className="flex justify-between text-slate-700">
-                  <span>Spese variabili</span>
-                  <span className="text-red-500">−{formatEur(totaleSpese)}</span>
-                </div>
-              )}
-              {totaleFattureRicevute > 0 && (
-                <div className="flex justify-between text-slate-700">
-                  <span>Fatture ricevute</span>
-                  <span className="text-red-500">−{formatEur(totaleFattureRicevute)}</span>
-                </div>
-              )}
-              <div className="flex justify-between text-slate-700">
-                <span>Spese fisse</span>
-                <span className="text-red-500">−{formatEur(totaleFisso)}</span>
-              </div>
-              {totaleRateMensili > 0 && (
-                <div className="flex justify-between text-slate-700">
-                  <span>Rate debiti</span>
-                  <span className="text-red-500">−{formatEur(totaleRateMensili)}</span>
-                </div>
-              )}
-              <div className="flex justify-between font-bold border-t border-slate-200 pt-1.5 mt-0.5">
-                <span>Saldo reale</span>
-                <span className={saldoRealeColore}>{formatEur(saldoReale)}</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* CARDS SECONDARIE */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <button onClick={() => navigate('/budget')} className="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-left active:opacity-70">
-            <p className="text-xs text-amber-600 mb-1">Tasse stimate trimestre</p>
-            <p className="text-xl font-bold text-amber-600">{fmtBig(irpfQ + igicQ)}</p>
-            <p className="text-xs text-amber-400 mt-1">scad. {infoQ.deadline}</p>
-          </button>
-          <button onClick={() => navigate('/debiti')} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-left active:opacity-70">
-            <p className="text-xs text-slate-500 mb-1">Debito residuo</p>
-            <p className="text-xl font-bold text-slate-700">{fmtBig(totaleResiduo)}</p>
-            <p className="text-xs text-slate-400 mt-1">totale da pagare</p>
-          </button>
-        </div>
-
-        {/* PROSSIME USCITE STRAORDINARIE */}
-        <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 mb-6">
-          <p className="text-xs text-orange-500 uppercase tracking-wide mb-2">Prossime uscite straordinarie</p>
-          <div className="flex justify-between items-center mb-1">
-            <p className="text-sm text-orange-700">Giugno — debiti fiscali</p>
-            <p className="text-base font-bold text-orange-600">€466</p>
-          </div>
-          <div className="flex justify-between items-center">
-            <p className="text-sm text-orange-700">20 luglio — Mod 130 + 420</p>
-            <p className="text-base font-bold text-orange-600">{fmtBig(irpfQ + igicQ)}</p>
-          </div>
-          <p className="text-xs text-orange-400 mt-2">I €466 di giugno non sono nelle rate mensili — mettili da parte</p>
-        </div>
-
         {/* BOTTONI */}
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => navigate('/entrate')}
-            className="bg-green-500 text-white rounded-2xl py-4 font-bold text-base active:bg-green-600">
-            + Entrata
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',animation:'fadeUp .4s ease both 1s'}}>
+          <button onClick={()=>navigate('/entrate')} style={{background:'transparent',border:'1px solid rgba(74,222,128,0.3)',borderRadius:'2px',padding:'14px',color:'#4ade80',fontSize:'11px',fontWeight:700,letterSpacing:'.1em',fontFamily:"'Courier New',monospace",cursor:'pointer',textShadow:'0 0 8px rgba(74,222,128,0.3)'}}>
+            + ENTRATA
           </button>
-          <button onClick={() => navigate('/spese')}
-            className="bg-slate-800 text-white rounded-2xl py-4 font-bold text-base active:bg-slate-700">
-            + Spesa
+          <button onClick={()=>navigate('/spese')} style={{background:'transparent',border:'1px solid rgba(255,0,255,0.2)',borderRadius:'2px',padding:'14px',color:'rgba(255,0,255,0.5)',fontSize:'11px',fontWeight:700,letterSpacing:'.1em',fontFamily:"'Courier New',monospace",cursor:'pointer'}}>
+            + SPESA
           </button>
         </div>
+
+        </div>{/* /dash-col right */}
+        </div>{/* /dash-grid */}
 
       </div>
 
-      {/* MODAL AZZERA COMMISSIONE */}
-      {showAzzera && (
-        <div className="fixed inset-0 bg-black/50 flex items-end justify-center z-50"
-          onClick={() => setShowAzzera(false)}>
-          <div className="bg-white rounded-t-2xl p-6 w-full max-w-lg" onClick={e => e.stopPropagation()}>
-            <p className="text-base font-bold text-slate-800 mb-1">Fattura commissione guida</p>
-            <p className="text-sm text-slate-500 mb-1">T{infoQ.q} {infoQ.anno} · Tenerife Stars</p>
-            <p className="text-xs text-slate-400 mb-4">Stima: {fmtBig(commissioneStimata)} — inserisci il reale (totale con IGIC 7%)</p>
-            <input
-              type="number" inputMode="decimal" placeholder="es. 450"
-              value={azzeraInput} onChange={e => setAzzeraInput(e.target.value)}
-              className="w-full border border-slate-300 rounded-xl px-4 py-3 text-lg mb-4" autoFocus />
-            <div className="flex gap-3">
-              <button onClick={() => { setShowAzzera(false); setAzzeraInput('') }}
-                className="flex-1 border border-slate-300 rounded-xl py-3 text-sm font-medium text-slate-600">
-                Annulla
-              </button>
-              <button onClick={handleAzzera} disabled={savingAzzera || !azzeraInput}
-                className="flex-1 bg-indigo-600 text-white rounded-xl py-3 text-sm font-semibold disabled:opacity-40">
-                {savingAzzera ? 'Salvo...' : 'Inserisci e azzera'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
+

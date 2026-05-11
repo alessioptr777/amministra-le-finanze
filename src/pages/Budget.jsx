@@ -88,10 +88,8 @@ export default function Budget() {
       }, 0) * mesiYTD
 
       const costiDedSpeseYTD = (spDedYTD.data || []).reduce((s, sp) => s + impSpesa(sp), 0)
-
       const costiYTD = (frYTD.data || []).reduce((s, f) => s + imp(f), 0)
         + costiDedFisseYTD + costiDedDebitiYTD + costiDedSpeseYTD
-
       const profitto = ricaviYTD - costiYTD
       const irpfStima = Math.max(0, profitto * 0.20)
 
@@ -124,10 +122,8 @@ export default function Budget() {
         }, 0)
 
       const igicStima = Math.max(0, igicEntrante - igicUscente)
-
       setStima({ irpf: irpfStima, igic: igicStima, profitto, ricavi: ricaviYTD, costi: costiYTD })
 
-      // Carica il reale già salvato per questo trimestre
       const { data: saved } = await supabase
         .from('tasse_trimestrali')
         .select('*')
@@ -195,150 +191,162 @@ export default function Budget() {
   const totaleReale = salvatoCorrente ? (salvatoCorrente.irpf_reale || 0) + (salvatoCorrente.igic_reale || 0) : null
   const differenza = totaleReale !== null ? totaleReale - totaleStima : null
 
+  const cpCard = {background:'#0e0e18',border:'1px solid rgba(0,255,255,0.15)',borderRadius:'2px',padding:'10px 12px',marginBottom:'10px',position:'relative'}
+  const cpTopLine = {position:'absolute',top:0,left:0,right:0,height:'1px',background:'linear-gradient(90deg,transparent,#0ff,transparent)',backgroundSize:'200% 100%',animation:'borderFlow 10s linear infinite'}
+  const cpInput = {width:'100%',background:'#000',border:'1px solid rgba(0,255,255,0.2)',borderRadius:'2px',padding:'8px 10px',color:'#e8e8f0',fontSize:'12px',fontFamily:"'Courier New',monospace",outline:'none',boxSizing:'border-box'}
+  const cpLabel = {fontSize:'8px',letterSpacing:'.15em',color:'rgba(0,255,255,0.7)',textTransform:'uppercase',display:'block',marginBottom:'4px'}
+  const cpRow = {display:'flex',justifyContent:'space-between',alignItems:'center',borderBottom:'1px solid rgba(255,255,255,0.04)',padding:'5px 0',fontSize:'11px'}
+
   return (
-    <div className="p-4 max-w-lg mx-auto">
-      <h1 className="text-2xl font-bold text-slate-800 mb-1">Tasse</h1>
-      <p className="text-xs text-slate-400 mb-5">Stima vs reale del commercialista</p>
+    <div style={{background:'#000',minHeight:'100vh',fontFamily:"'Courier New',monospace",paddingBottom:'80px',position:'relative'}}>
+      <style>{`
+        @keyframes scanline2{0%{top:-5%}100%{top:105%}}
+        @keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes borderFlow{0%{background-position:-200% 0}100%{background-position:200% 0}}
+        @media(min-width:768px){.page-wrap{max-width:800px!important;padding:24px 32px 40px!important}}
+      `}</style>
+      <div style={{position:'fixed',left:0,right:0,height:'3px',background:'rgba(0,255,255,0.03)',zIndex:10,pointerEvents:'none',animation:'scanline2 24s linear infinite'}} />
 
-      {loadingStima ? (
-        <p className="text-center text-slate-400 py-10">Caricamento...</p>
-      ) : (
-        <>
-          {/* Trimestre corrente */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-slate-700">{infoQ.label}</h2>
-              <span className="text-xs text-slate-400">scadenza {infoQ.deadline}</span>
-            </div>
+      <div className="page-wrap" style={{maxWidth:'390px',margin:'0 auto',padding:'16px 14px 24px',position:'relative',zIndex:2}}>
 
-            {/* Stima app */}
-            <div className="bg-slate-50 rounded-xl p-3 mb-3">
-              <p className="text-xs font-medium text-slate-500 mb-2">Stima app</p>
-              <div className="flex flex-col gap-1.5 text-sm">
-                <div className="flex justify-between text-slate-600">
-                  <span>Ricavi YTD</span>
-                  <span>{formatEur(stima?.ricavi)}</span>
+        {/* TOP BAR */}
+        <div style={{borderBottom:'1px solid rgba(0,255,255,0.08)',paddingBottom:'8px',marginBottom:'16px'}}>
+          <div style={{fontSize:'11px',fontWeight:700,letterSpacing:'.2em',color:'rgba(0,255,255,0.7)'}}>TASSE</div>
+          <div style={{fontSize:'8px',letterSpacing:'.1em',color:'rgba(255,255,255,0.6)',marginTop:'2px'}}>STIMA VS REALE COMMERCIALISTA</div>
+        </div>
+
+        {loadingStima ? (
+          <div style={{textAlign:'center',padding:'30px 0',fontSize:'9px',letterSpacing:'.15em',color:'rgba(0,255,255,0.65)'}}>CARICAMENTO...</div>
+        ) : (
+          <>
+            {/* TRIMESTRE CORRENTE */}
+            <div style={{...cpCard,animation:'fadeUp .4s ease both'}}>
+              <div style={cpTopLine} />
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'12px'}}>
+                <span style={{fontSize:'9px',letterSpacing:'.15em',color:'rgba(0,255,255,0.75)'}}>{infoQ.label.toUpperCase()}</span>
+                <span style={{fontSize:'7px',letterSpacing:'.08em',color:'rgba(255,0,64,0.6)'}}>SCAD: {infoQ.deadline.toUpperCase()}</span>
+              </div>
+
+              {/* STIMA */}
+              <div style={{background:'rgba(0,0,0,0.4)',border:'1px solid rgba(0,255,255,0.08)',borderRadius:'2px',padding:'10px',marginBottom:'10px'}}>
+                <div style={{fontSize:'7px',letterSpacing:'.2em',color:'rgba(0,255,255,0.65)',marginBottom:'8px'}}>STIMA_APP</div>
+                {[
+                  {label:'RICAVI_YTD',val:formatEur(stima?.ricavi),color:'#4ade80'},
+                  {label:'COSTI_DED_YTD',val:`-${formatEur(stima?.costi)}`,color:'#ff0040'},
+                ].map((r,i)=>(
+                  <div key={i} style={cpRow}>
+                    <span style={{color:'rgba(255,255,255,0.65)',fontSize:'10px',letterSpacing:'.05em'}}>{r.label}</span>
+                    <span style={{color:r.color,fontWeight:700,fontSize:'11px'}}>{r.val}</span>
+                  </div>
+                ))}
+                <div style={{...cpRow,borderTop:'1px solid rgba(255,255,255,0.08)',borderBottom:'none',paddingTop:'6px',marginTop:'2px'}}>
+                  <span style={{color:'rgba(255,255,255,0.75)',fontSize:'10px',letterSpacing:'.05em'}}>UTILE_IMPONIBILE</span>
+                  <span style={{color:'#e8e8f0',fontWeight:700}}>{formatEur(stima?.profitto)}</span>
                 </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>Costi deducibili YTD</span>
-                  <span>-{formatEur(stima?.costi)}</span>
+                <div style={{...cpRow,borderBottom:'none'}}>
+                  <span style={{color:'rgba(255,255,255,0.65)',fontSize:'10px',letterSpacing:'.05em'}}>IRPF_MOD130 (20%)</span>
+                  <span style={{color:'#ffd700',fontWeight:700}}>{formatEur(stima?.irpf)}</span>
                 </div>
-                <div className="flex justify-between text-slate-600 border-t border-slate-200 pt-1.5">
-                  <span>Utile imponibile</span>
-                  <span className="font-medium">{formatEur(stima?.profitto)}</span>
+                <div style={{...cpRow,borderBottom:'none'}}>
+                  <span style={{color:'rgba(255,255,255,0.65)',fontSize:'10px',letterSpacing:'.05em'}}>IGIC_MOD420</span>
+                  <span style={{color:'#ffd700',fontWeight:700}}>{formatEur(stima?.igic)}</span>
                 </div>
-                <div className="flex justify-between text-slate-700 mt-1">
-                  <span>IRPF mod. 130 (20%)</span>
-                  <span className="font-semibold">{formatEur(stima?.irpf)}</span>
-                </div>
-                <div className="flex justify-between text-slate-700">
-                  <span>IGIC mod. 420</span>
-                  <span className="font-semibold">{formatEur(stima?.igic)}</span>
-                </div>
-                <div className="flex justify-between font-bold text-slate-800 border-t border-slate-200 pt-1.5 mt-0.5">
-                  <span>Totale stimato</span>
-                  <span className="text-purple-700">{formatEur(totaleStima)}</span>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid rgba(255,215,0,0.2)',paddingTop:'6px',marginTop:'4px'}}>
+                  <span style={{fontSize:'9px',letterSpacing:'.12em',color:'rgba(255,255,255,0.75)'}}>TOTALE_STIMATO</span>
+                  <span style={{fontSize:'18px',fontWeight:700,letterSpacing:'-1px',color:'#ffd700',textShadow:'0 0 8px rgba(255,215,0,0.3)'}}>{formatEur(totaleStima)}</span>
                 </div>
               </div>
-            </div>
 
-            {/* Reale commercialista */}
-            {salvatoCorrente && !editando ? (
-              <div className="bg-blue-50 rounded-xl p-3">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-medium text-blue-700">Reale commercialista</p>
-                  <button onClick={() => startEdit(salvatoCorrente)} className="text-xs text-blue-500">Modifica</button>
-                </div>
-                <div className="flex flex-col gap-1.5 text-sm">
-                  <div className="flex justify-between text-slate-700">
-                    <span>IRPF mod. 130</span>
-                    <span className="font-semibold">{formatEur(salvatoCorrente.irpf_reale)}</span>
+              {/* REALE */}
+              {salvatoCorrente && !editando ? (
+                <div style={{background:'rgba(0,255,255,0.03)',border:'1px solid rgba(0,255,255,0.12)',borderRadius:'2px',padding:'10px'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px'}}>
+                    <span style={{fontSize:'7px',letterSpacing:'.2em',color:'rgba(0,255,255,0.7)'}}>REALE_COMMERCIALISTA</span>
+                    <button onClick={()=>startEdit(salvatoCorrente)}
+                      style={{background:'none',border:'none',color:'rgba(0,255,255,0.7)',fontSize:'9px',letterSpacing:'.1em',cursor:'pointer',fontFamily:"'Courier New',monospace"}}>MODIFICA</button>
                   </div>
-                  <div className="flex justify-between text-slate-700">
-                    <span>IGIC mod. 420</span>
-                    <span className="font-semibold">{formatEur(salvatoCorrente.igic_reale)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold border-t border-blue-200 pt-1.5 mt-0.5">
-                    <span>Totale reale</span>
-                    <span className="text-blue-700">{formatEur(totaleReale)}</span>
+                  {[
+                    {label:'IRPF_MOD130',val:formatEur(salvatoCorrente.irpf_reale)},
+                    {label:'IGIC_MOD420',val:formatEur(salvatoCorrente.igic_reale)},
+                  ].map((r,i)=>(
+                    <div key={i} style={cpRow}>
+                      <span style={{color:'rgba(255,255,255,0.65)',fontSize:'10px',letterSpacing:'.05em'}}>{r.label}</span>
+                      <span style={{color:'#00ffff',fontWeight:700}}>{r.val}</span>
+                    </div>
+                  ))}
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',borderTop:'1px solid rgba(0,255,255,0.1)',paddingTop:'6px',marginTop:'4px'}}>
+                    <span style={{fontSize:'9px',letterSpacing:'.12em',color:'rgba(255,255,255,0.75)'}}>TOTALE_REALE</span>
+                    <span style={{fontSize:'16px',fontWeight:700,color:'#00ffff',textShadow:'0 0 6px rgba(0,255,255,0.2)'}}>{formatEur(totaleReale)}</span>
                   </div>
                   {differenza !== null && (
-                    <div className={`flex justify-between text-xs mt-1 ${differenza > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                      <span>{differenza > 0 ? 'Sottostimato di' : 'Sovrastimato di'}</span>
-                      <span className="font-medium">{formatEur(Math.abs(differenza))}</span>
+                    <div style={{display:'flex',justifyContent:'space-between',marginTop:'4px',fontSize:'9px',letterSpacing:'.08em',color:differenza>0?'#ff0040':'#4ade80'}}>
+                      <span>{differenza>0?'SOTTOSTIMATO DI':'SOVRASTIMATO DI'}</span>
+                      <span style={{fontWeight:700}}>{formatEur(Math.abs(differenza))}</span>
                     </div>
                   )}
-                  {salvatoCorrente.note && <p className="text-xs text-slate-400 mt-1">{salvatoCorrente.note}</p>}
+                  {salvatoCorrente.note && <div style={{fontSize:'9px',color:'rgba(255,255,255,0.6)',marginTop:'4px'}}>{salvatoCorrente.note}</div>}
                 </div>
-              </div>
-            ) : (
-              <div className={`${editando ? 'bg-blue-50 border border-blue-200' : 'bg-slate-50 border border-dashed border-slate-300'} rounded-xl p-3`}>
-                <p className="text-xs font-medium text-slate-600 mb-2">
-                  {editando ? 'Modifica reale commercialista' : 'Inserisci il reale del commercialista'}
-                </p>
-                <div className="flex flex-col gap-2">
-                  <div className="grid grid-cols-2 gap-2">
+              ) : (
+                <div style={{background:'rgba(0,0,0,0.3)',border:`1px solid ${editando?'rgba(0,255,255,0.2)':'rgba(0,255,255,0.08)'}`,borderRadius:'2px',padding:'10px'}}>
+                  <div style={{fontSize:'7px',letterSpacing:'.2em',color:'rgba(0,255,255,0.65)',marginBottom:'10px'}}>
+                    {editando?'MODIFICA_REALE_COMMERCIALISTA':'INSERISCI_REALE_COMMERCIALISTA'}
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'8px'}}>
                     <div>
-                      <label className="text-xs text-slate-500 mb-0.5 block">IRPF mod. 130 €</label>
-                      <input type="number" min="0" step="0.01" placeholder="0,00"
-                        value={formReale.irpf} onChange={e => setFormReale(f => ({ ...f, irpf: e.target.value }))}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                      <label style={cpLabel}>IRPF mod.130 €</label>
+                      <input type="number" min="0" step="0.01" placeholder="0,00" value={formReale.irpf}
+                        onChange={e=>setFormReale(f=>({...f,irpf:e.target.value}))} style={cpInput} />
                     </div>
                     <div>
-                      <label className="text-xs text-slate-500 mb-0.5 block">IGIC mod. 420 €</label>
-                      <input type="number" min="0" step="0.01" placeholder="0,00"
-                        value={formReale.igic} onChange={e => setFormReale(f => ({ ...f, igic: e.target.value }))}
-                        className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                      <label style={cpLabel}>IGIC mod.420 €</label>
+                      <input type="number" min="0" step="0.01" placeholder="0,00" value={formReale.igic}
+                        onChange={e=>setFormReale(f=>({...f,igic:e.target.value}))} style={cpInput} />
                     </div>
                   </div>
-                  <input type="text" placeholder="Note (es. sanzione, interessi...)"
-                    value={formReale.note} onChange={e => setFormReale(f => ({ ...f, note: e.target.value }))}
-                    className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
-                  <div className="flex gap-2">
+                  <input type="text" placeholder="Note (es. sanzione, interessi...)" value={formReale.note}
+                    onChange={e=>setFormReale(f=>({...f,note:e.target.value}))} style={{...cpInput,marginBottom:'8px'}} />
+                  <div style={{display:'flex',gap:'6px'}}>
                     {editando && (
-                      <button onClick={() => { setEditando(false); setFormReale({ irpf: '', igic: '', note: '' }) }}
-                        className="flex-1 border border-slate-300 text-slate-600 rounded-lg py-2 text-sm">
-                        Annulla
+                      <button onClick={()=>{setEditando(false);setFormReale({irpf:'',igic:'',note:''})}}
+                        style={{flex:1,background:'transparent',border:'1px solid rgba(255,255,255,0.1)',borderRadius:'2px',color:'rgba(255,255,255,0.65)',padding:'8px',fontSize:'9px',fontFamily:"'Courier New',monospace",cursor:'pointer',letterSpacing:'.05em'}}>
+                        [ANNULLA]
                       </button>
                     )}
                     <button onClick={handleSalvaReale} disabled={saving}
-                      className="flex-1 bg-blue-600 text-white rounded-xl py-2 font-semibold text-sm disabled:opacity-40">
-                      {saving ? 'Salvo...' : 'Salva'}
+                      style={{flex:1,background:'transparent',border:'1px solid rgba(0,255,255,0.3)',borderRadius:'2px',color:'#00ffff',padding:'8px',fontSize:'9px',fontFamily:"'Courier New',monospace",letterSpacing:'.1em',cursor:'pointer',opacity:saving?.4:1}}>
+                      {saving?'[SALVO...]':'[SALVA]'}
                     </button>
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-
-          {/* Storico */}
-          {storico.filter(r => !(r.anno === annoCorrente && r.trimestre === qCorrente)).length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Storico</p>
-              <div className="flex flex-col gap-2">
-                {storico
-                  .filter(r => !(r.anno === annoCorrente && r.trimestre === qCorrente))
-                  .map(r => {
-                    const tot = (r.irpf_reale || 0) + (r.igic_reale || 0)
-                    return (
-                      <div key={r.id} className="bg-white rounded-xl border border-slate-200 p-3">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium text-slate-700">T{r.trimestre} {r.anno}</span>
-                          <span className="font-bold text-slate-800">{formatEur(tot)}</span>
-                        </div>
-                        <div className="flex gap-4 mt-1 text-xs text-slate-500">
-                          <span>IRPF {formatEur(r.irpf_reale)}</span>
-                          <span>IGIC {formatEur(r.igic_reale)}</span>
-                        </div>
-                        {r.note && <p className="text-xs text-slate-400 mt-1">{r.note}</p>}
-                      </div>
-                    )
-                  })}
-              </div>
+              )}
             </div>
-          )}
-        </>
-      )}
+
+            {/* STORICO */}
+            {storico.filter(r=>!(r.anno===annoCorrente&&r.trimestre===qCorrente)).length>0 && (
+              <>
+                <div style={{fontSize:'7px',letterSpacing:'.2em',color:'rgba(0,255,255,0.62)',marginBottom:'8px',marginTop:'4px'}}>STORICO</div>
+                {storico.filter(r=>!(r.anno===annoCorrente&&r.trimestre===qCorrente)).map((r,i)=>{
+                  const tot = (r.irpf_reale||0)+(r.igic_reale||0)
+                  return (
+                    <div key={r.id} style={{...cpCard,marginBottom:'6px',animation:`fadeUp .4s ease both ${i*0.05+0.2}s`}}>
+                      <div style={cpTopLine} />
+                      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'4px'}}>
+                        <span style={{fontSize:'9px',letterSpacing:'.15em',color:'rgba(0,255,255,0.75)'}}>T{r.trimestre}_{r.anno}</span>
+                        <span style={{fontSize:'14px',fontWeight:700,color:'#e8e8f0',letterSpacing:'-1px'}}>{formatEur(tot)}</span>
+                      </div>
+                      <div style={{display:'flex',gap:'12px',fontSize:'9px',color:'rgba(255,255,255,0.65)'}}>
+                        <span>IRPF {formatEur(r.irpf_reale)}</span>
+                        <span>IGIC {formatEur(r.igic_reale)}</span>
+                      </div>
+                      {r.note && <div style={{fontSize:'9px',color:'rgba(255,255,255,0.55)',marginTop:'3px'}}>{r.note}</div>}
+                    </div>
+                  )
+                })}
+              </>
+            )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
